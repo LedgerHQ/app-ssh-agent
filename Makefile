@@ -53,7 +53,7 @@ INCLUDES_PATH := $(dir $(shell find $(BOLOS_SDK)/lib_stusb* | grep "\.h$$")) inc
 DEFINES := ST31 gcc __IO=volatile
 
 DEFINES   += OS_IO_SEPROXYHAL IO_SEPROXYHAL_BUFFER_SIZE_B=128
-DEFINES   += HAVE_BAGL HAVE_PRINTF 
+DEFINES   += HAVE_BAGL HAVE_PRINTF
 DEFINES   += HAVE_IO_USB HAVE_L4_USBLIB IO_USB_MAX_ENDPOINTS=7 IO_HID_EP_LENGTH=64 HAVE_USB_APDU
 
 ##############
@@ -61,22 +61,22 @@ DEFINES   += HAVE_IO_USB HAVE_L4_USBLIB IO_USB_MAX_ENDPOINTS=7 IO_HID_EP_LENGTH=
 ##############
 GCCPATH   := $(BOLOS_ENV)/gcc-arm-none-eabi-5_3-2016q1/bin/
 CLANGPATH := $(BOLOS_ENV)/clang-arm-fropi/bin
-CC       := $(CLANGPATH)/clang 
+CC       := $(CLANGPATH)/clang
 
-CFLAGS   := 
-CFLAGS   += -gdwarf-2  -gstrict-dwarf 
+CFLAGS   :=
+CFLAGS   += -gdwarf-2  -gstrict-dwarf
 #CFLAGS   += -O0
 #CFLAGS   += -O0 -g3
 CFLAGS   += -O3 -Os
-CFLAGS   += -mcpu=cortex-m0 -mthumb 
-CFLAGS   += -fno-common -mtune=cortex-m0 -mlittle-endian 
+CFLAGS   += -mcpu=cortex-m0 -mthumb
+CFLAGS   += -fno-common -mtune=cortex-m0 -mlittle-endian
 CFLAGS   += -std=gnu99 -Werror=int-to-pointer-cast -Wall -Wextra #-save-temps
-CFLAGS   += -fdata-sections -ffunction-sections -funsigned-char -fshort-enums 
-CFLAGS   += -mno-unaligned-access 
+CFLAGS   += -fdata-sections -ffunction-sections -funsigned-char -fshort-enums
+CFLAGS   += -mno-unaligned-access
 CFLAGS   += -Wno-unused-parameter -Wno-duplicate-decl-specifier
 
 CFLAGS   += -fropi --target=armv6m-none-eabi
-#CFLAGS   += -finline-limit-0 -funsigned-bitfields 
+#CFLAGS   += -finline-limit-0 -funsigned-bitfields
 
 AS     := $(GCCPATH)/arm-none-eabi-gcc
 AFLAGS += -ggdb2 -O3 -Os -mcpu=cortex-m0 -fno-common -mtune=cortex-m0
@@ -84,23 +84,23 @@ AFLAGS += -ggdb2 -O3 -Os -mcpu=cortex-m0 -fno-common -mtune=cortex-m0
 # NOT SUPPORTED BY STM3L152 CFLAGS   += -fpack-struct
 #-pg --coverage
 LD       := $(GCCPATH)/arm-none-eabi-gcc
-LDFLAGS  := 
-LDFLAGS  += -gdwarf-2  -gstrict-dwarf 
+LDFLAGS  :=
+LDFLAGS  += -gdwarf-2  -gstrict-dwarf
 #LDFLAGS  += -O0 -g3
 LDFLAGS  += -O3 -Os
 #LDFLAGS  += -O0
-LDFLAGS  += -Wall 
-LDFLAGS  += -mcpu=cortex-m0 -mthumb 
-LDFLAGS  += -fno-common -ffunction-sections -fdata-sections -fwhole-program -nostartfiles 
+LDFLAGS  += -Wall
+LDFLAGS  += -mcpu=cortex-m0 -mthumb
+LDFLAGS  += -fno-common -ffunction-sections -fdata-sections -fwhole-program -nostartfiles
 LDFLAGS  += -mno-unaligned-access
 #LDFLAGS  += -nodefaultlibs
 #LDFLAGS  += -nostdlib -nostdinc
 LDFLAGS  += -T$(BOLOS_SDK)/script.ld  -Wl,--gc-sections -Wl,-Map,debug/$(PROG).map,--cref
 LDLIBS   += -Wl,--library-path -Wl,$(GCCPATH)/../lib/armv6-m/
-#LDLIBS   += -Wl,--start-group 
-LDLIBS   += -lm -lgcc -lc 
+#LDLIBS   += -Wl,--start-group
+LDLIBS   += -lm -lgcc -lc
 #LDLIBS   += -Wl,--end-group
-# -mno-unaligned-access 
+# -mno-unaligned-access
 #-pg --coverage
 
 ### computed variables
@@ -117,6 +117,7 @@ clean:
 
 prepare:
 	@mkdir -p bin obj debug dep
+	pip install -r requirements.pip
 
 .SECONDEXPANSION:
 
@@ -125,11 +126,11 @@ log = $(if $(strip $(VERBOSE)),$1,@$1)
 
 default: prepare bin/$(PROG)
 
-load: 
-	python -m ledgerblue.loadApp --targetId $(TARGET_ID) --fileName bin/$(PROG).hex --appName $(APPNAME) --icon `python $(BOLOS_SDK)/icon.py 16 16 icon.gif hexbitmaponly` $(APP_LOAD_PARAMS) 
+load:
+	python -m ledgerblue.loadApp --targetId $(TARGET_ID) --fileName bin/$(PROG).hex --appName $(APPNAME) --icon `python $(BOLOS_SDK)/icon.py 16 16 icon.gif hexbitmaponly` $(APP_LOAD_PARAMS)
 
 load_release:
-	python -m ledgerblue.loadApp --targetId $(TARGET_ID) --fileName bin/$(PROG).hex --appName $(APPNAME) --icon `python $(BOLOS_SDK)/icon.py 16 16 icon.gif hexbitmaponly` $(APP_LOAD_PARAMS) --signature 304402200c67c48ab210566f576c4ed95c6b151df106aad4b7c60e88b387c72945cd0b8e0220442c8b3f2968f109c7fc65611c1dce99f41243013273c75f74dbaeb80f56bfc6 
+	python -m ledgerblue.loadApp --targetId $(TARGET_ID) --fileName bin/$(PROG).hex --appName $(APPNAME) --icon `python $(BOLOS_SDK)/icon.py 16 16 icon.gif hexbitmaponly` $(APP_LOAD_PARAMS) --signature 304402200c67c48ab210566f576c4ed95c6b151df106aad4b7c60e88b387c72945cd0b8e0220442c8b3f2968f109c7fc65611c1dce99f41243013273c75f74dbaeb80f56bfc6
 
 delete:
 	python -m ledgerblue.deleteApp --targetId $(TARGET_ID) --appName $(APPNAME)
@@ -170,4 +171,3 @@ cc_cmdline = $(CC) -c $(CFLAGS) $(addprefix -D,$(2)) $(addprefix -I,$(1)) -o $(4
 as_cmdline = $(AS) -c $(AFLAGS) $(addprefix -D,$(2)) $(addprefix -I,$(1)) -o $(4) $(3)
 
 ### END GCC COMPILER RULES
-
