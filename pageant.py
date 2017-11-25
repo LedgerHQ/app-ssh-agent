@@ -1,11 +1,14 @@
-from base64 import b64encode
+from base64 import b64encode, b64decode
+from ctypes import addressof, c_ubyte, create_string_buffer, c_size_t
+from ctypes import c_void_p, c_long, c_longlong, c_ulong, c_ulonglong, POINTER, cast, string_at
 from ctypes import windll, Structure, sizeof, WINFUNCTYPE, pointer, byref, c_uint, c_int, c_char, c_wchar, memmove
+from ctypes.wintypes import BOOL, USHORT, LPWSTR
 from ctypes.wintypes import HWND, HANDLE, HBRUSH, LPCWSTR, WPARAM, LPARAM, MSG, RECT, HICON, POINT, DWORD, WORD, ARRAY
-from struct import pack
+from struct import pack, unpack
+from sys import maxint
 
 from ledgerblue.comm import getDongle
 from ledgerblue.commException import CommException
-from paramiko import win_pageant
 from pkg_resources import resource_stream
 
 kernel32 = windll.kernel32
@@ -13,6 +16,18 @@ gdi32 = windll.gdi32
 user32 = windll.user32
 shell32 = windll.shell32
 comctl32 = windll.comctl32
+advapi32 = windll.advapi32
+
+CreateFileMapping = kernel32.CreateFileMappingW
+CreateFileMapping.argtypes = [
+    HANDLE,
+    c_void_p,
+    DWORD,
+    DWORD,
+    DWORD,
+    LPWSTR,
+]
+CreateFileMapping.restype = HANDLE
 
 WS_EX_APPWINDOW = 0x40000
 WS_OVERLAPPEDWINDOW = 0xcf0000
@@ -53,6 +68,17 @@ CF_TEXT = 1
 GMEM_MOVEABLE = 2
 GMEM_ZEROINIT = 64
 GHND = (GMEM_MOVEABLE | GMEM_ZEROINIT)
+WM_COPYDATA = 74
+AGENT_COPYDATA_ID = 0x804e50ba
+AGENT_MAX_MSGLEN = 8192
+INVALID_HANDLE_VALUE = -1
+PAGE_READWRITE = 0x4
+FILE_MAP_WRITE = 0x2
+SSH2_AGENTC_REQUEST_IDENTITIES = 11
+SSH2_AGENTC_SIGN_REQUEST = 13
+SSH2_AGENT_IDENTITIES_ANSWER = 12
+SSH2_AGENT_SIGN_RESPONSE = 14
+SSH_AGENT_FAILURE = 5
 
 WNDPROCTYPE = WINFUNCTYPE(c_int, HWND, c_uint, WPARAM, LPARAM)
 
@@ -108,6 +134,172 @@ class NOTIFYICONDATA(Structure):
                 ('guidItem', GUID),
                 ('hBalloonIcon', HICON),
                 ]
+
+
+PVOID = c_void_p
+if sizeof(c_long) == sizeof(c_void_p):
+    ULONG_PTR = c_ulong
+    LONG_PTR = c_long
+elif sizeof(c_longlong) == sizeof(c_void_p):
+    ULONG_PTR = c_ulonglong
+    LONG_PTR = c_longlong
+
+
+class COPYDATASTRUCT(Structure):
+    _fields_ = [('dwData', ULONG_PTR),
+                ('cbData', DWORD),
+                ('lpData', PVOID),
+                ]
+
+
+PCOPYDATASTRUCT = POINTER(COPYDATASTRUCT)
+
+
+class TokenAccess:
+    def __init__(self):
+        pass
+
+    TOKEN_QUERY = 0x8
+
+
+class TokenInformationClass:
+    def __init__(self):
+        pass
+
+    TokenUser = 1
+
+
+class TokenUser(Structure):
+    num = 1
+    _fields_ = [('SID', c_void_p),
+                ('ATTRIBUTES', DWORD),
+                ]
+
+
+class SecurityDescriptor(Structure):
+    SECURITY_DESCRIPTOR_CONTROL = USHORT
+    REVISION = 1
+    _fields_ = [('Revision', c_ubyte),
+                ('Sbz1', c_ubyte),
+                ('Control', SECURITY_DESCRIPTOR_CONTROL),
+                ('Owner', c_void_p),
+                ('Group', c_void_p),
+                ('Sacl', c_void_p),
+                ('Dacl', c_void_p),
+                ]
+
+
+class SecurityAttributes(Structure):
+    _fields_ = [('nLength', DWORD),
+                ('lpSecurityDescriptor', c_void_p),
+                ('bInheritHandle', BOOL),
+                ]
+
+    def __init__(self, *args, **kwargs):
+        super(SecurityAttributes, self).__init__(*args, **kwargs)
+        self.nLength = sizeof(SecurityAttributes)
+        self._descriptor = None
+        self.lpSecurityDescriptor = None
+
+    @property
+    def descriptor(self):
+        return self._descriptor
+
+    @descriptor.setter
+    def descriptor(self, value):
+        self._descriptor = value
+        self.lpSecurityDescriptor = addressof(value)
+
+
+advapi32.SetSecurityDescriptorOwner.argtypes = (
+    POINTER(SecurityDescriptor),
+    c_void_p,
+    BOOL,
+)
+
+
+def get_token_information(token, information_class):
+    data_size = DWORD()
+    advapi32.GetTokenInformation(token, information_class.num, 0, 0, byref(data_size))
+    data = create_string_buffer(data_size.value)
+    advapi32.GetTokenInformation(token,
+                                 information_class.num,
+                                 byref(data), sizeof(data),
+                                 byref(data_size))
+    return cast(data, POINTER(TokenUser)).contents
+
+
+def open_process_token(proc_handle, access):
+    result = HANDLE()
+    proc_handle = HANDLE(proc_handle)
+    advapi32.OpenProcessToken(proc_handle, access, byref(result))
+    return result
+
+
+def get_current_user():
+    process = open_process_token(kernel32.GetCurrentProcess(), TokenAccess.TOKEN_QUERY)
+    return get_token_information(process, TokenUser)
+
+
+def get_security_attributes_for_user(user=None):
+    if user is None:
+        user = get_current_user()
+    assert isinstance(user, TokenUser), "user must be TOKEN_USER instance"
+    security_descriptor = SecurityDescriptor()
+    security_attributes = SecurityAttributes()
+    security_attributes.descriptor = security_descriptor
+    security_attributes.bInheritHandle = 1
+    advapi32.InitializeSecurityDescriptor(byref(security_descriptor), SecurityDescriptor.REVISION)
+    advapi32.SetSecurityDescriptorOwner(byref(security_descriptor), user.SID, 0)
+    return security_attributes
+
+
+security_attributes_global = get_security_attributes_for_user()
+security_attributes_pointer = (
+    byref(security_attributes_global)
+    if security_attributes_global else None
+)
+
+
+class MemoryMap(object):
+    def __init__(self, name):
+        self.filemap = INVALID_HANDLE_VALUE
+        self.length = AGENT_MAX_MSGLEN
+        self.name = name
+        self.pos = 0
+
+    def __enter__(self):
+        self.filemap = CreateFileMapping(INVALID_HANDLE_VALUE, security_attributes_pointer, PAGE_READWRITE, 0,
+                                         self.length, self.name)
+        if self.filemap == INVALID_HANDLE_VALUE:
+            raise Exception("Failed to create file mapping")
+        self.view = kernel32.MapViewOfFile(self.filemap, FILE_MAP_WRITE, 0, 0, 0)
+        return self
+
+    def seek(self, pos):
+        self.pos = pos
+
+    def write(self, data):
+        assert isinstance(data, bytes)
+        n = len(data)
+        if self.pos + n >= self.length:
+            raise ValueError("Refusing to write %d bytes" % n)
+        dest = self.view + self.pos
+        length = c_size_t(n)
+        kernel32.RtlMoveMemory(dest, data, length)
+        self.pos += n
+
+    def read(self, n):
+        out = create_string_buffer(n)
+        source = self.view + self.pos
+        length = c_size_t(n)
+        kernel32.RtlMoveMemory(out, source, length)
+        self.pos += n
+        return out.raw
+
+    def __exit__(self, exc_type, exc_val, tb):
+        kernel32.UnmapViewOfFile(self.view)
+        kernel32.CloseHandle(self.filemap)
 
 
 user32.DefWindowProcW.argtypes = [HWND, c_uint, WPARAM, LPARAM]
@@ -176,7 +368,7 @@ def parse_bip32_path(path):
     return result
 
 
-def get_public_key():
+def get_public_key(timeout=TIMEOUT_SECONDS):
     p2 = "01"
     key_header = KEY_HEADER
     dongle_path = parse_bip32_path(KEY_PATH)
@@ -187,7 +379,7 @@ def get_public_key():
     except CommException as e:
         return e.message
     try:
-        result = dongle.exchange(bytes(apdu), TIMEOUT_SECONDS)
+        result = dongle.exchange(bytes(apdu), timeout)
     except CommException as e:
         return e.message
     finally:
@@ -197,6 +389,12 @@ def get_public_key():
     blob += pack(">I", len(CURVE_NAME)) + CURVE_NAME
     blob += pack(">I", len(key)) + key
     return key_header + " " + b64encode(blob)
+
+
+public_key_global = get_public_key(maxint)
+if ' ' not in public_key_global:
+    raise Exception('Public key reading error: %s' % public_key_global)
+key_blob = b64decode(public_key_global.split(' ', 1)[1])
 
 
 def copy_public_key_to_clipboard(hwnd):
@@ -209,6 +407,94 @@ def copy_public_key_to_clipboard(hwnd):
     kernel32.GlobalUnlock(handle)
     user32.SetClipboardData(CF_TEXT, handle)
     user32.CloseClipboard()
+
+
+def read_file_name_from_input(l_param):
+    cds = cast(l_param, PCOPYDATASTRUCT)
+    map_name = string_at(cds.contents.lpData)
+    return map_name
+
+
+def process_keys_request(pymap):
+    response = chr(SSH2_AGENT_IDENTITIES_ANSWER)
+    response += pack(">I", 1)
+    response += pack(">I", len(key_blob)) + key_blob
+    response += pack(">I", len(KEY_PATH)) + KEY_PATH
+    agent_response = pack(">I", len(response)) + response
+    pymap.seek(0)
+    pymap.write(agent_response)
+
+
+def process_sign_request(pymap):
+    datalen = pymap.read(4)
+    blob_size = unpack(">I", datalen)[0]
+    blob = pymap.read(blob_size)
+    if blob != key_blob:
+        print ("Client sent a different blob " + blob.encode('hex'))
+        response = chr(SSH_AGENT_FAILURE)
+        agent_response = pack(">I", len(response)) + response
+        pymap.seek(0)
+        pymap.write(agent_response)
+    challenge_size = unpack(">I", pymap.read(4))[0]
+    challenge = pymap.read(challenge_size)
+    dongle = getDongle(False)
+    offset = 0
+    signature = None
+    while offset != len(challenge):
+        data = ""
+        if offset == 0:
+            dongle_path = parse_bip32_path(KEY_PATH)
+            data = chr(len(dongle_path) / 4) + dongle_path
+        if (len(challenge) - offset) > (255 - len(data)):
+            chunk_size = (255 - len(data))
+        else:
+            chunk_size = len(challenge) - offset
+        data += challenge[offset: offset + chunk_size]
+        if offset == 0:
+            p1 = 0x00
+        else:
+            p1 = 0x01
+        p2 = 0x01
+        offset += chunk_size
+        apdu = "8004".decode('hex') + chr(p1) + chr(p2) + chr(len(data)) + data
+        signature = dongle.exchange(bytes(apdu))
+    dongle.close()
+    length = signature[3]
+    r = signature[4: 4 + length]
+    s = signature[4 + length + 2:]
+    r = str(r)
+    s = str(s)
+    encoded_signature_value = pack(">I", len(r)) + r
+    encoded_signature_value += pack(">I", len(s)) + s
+    encoded_signature = pack(">I", len(KEY_HEADER)) + KEY_HEADER
+    encoded_signature += pack(">I", len(encoded_signature_value)) + encoded_signature_value
+    response = chr(SSH2_AGENT_SIGN_RESPONSE)
+    response += pack(">I", len(encoded_signature)) + encoded_signature
+    agent_response = pack(">I", len(response)) + response
+    pymap.seek(0)
+    pymap.write(agent_response)
+
+
+def answer_if_device_present(pymap):
+    pymap.seek(0)
+    datalen = pymap.read(4)
+    retlen = unpack('>I', datalen)[0]
+    if retlen > 1:
+        retlen = 1
+    request_type = ord(pymap.read(retlen))
+    if request_type == SSH2_AGENTC_REQUEST_IDENTITIES:
+        process_keys_request(pymap)
+        return 1
+    elif request_type == SSH2_AGENTC_SIGN_REQUEST:
+        process_sign_request(pymap)
+        return 1
+    else:
+        pymap.seek(0)
+        response = chr(SSH_AGENT_FAILURE)
+        agent_response = pack(">I", len(response)) + response
+        pymap.seek(0)
+        pymap.write(agent_response)
+        return 0
 
 
 def wnd_procedure(hwnd, message, w_param, l_param):
@@ -246,8 +532,12 @@ def wnd_procedure(hwnd, message, w_param, l_param):
             copy_public_key_to_clipboard(hwnd)
         elif w_param == ID_EXIT:
             stop(hwnd)
-    elif message == win_pageant.win32con_WM_COPYDATA:
-        pass
+    elif message == WM_COPYDATA:
+        map_name = read_file_name_from_input(l_param)
+        pymap = MemoryMap(map_name)
+        with pymap:
+            ret = answer_if_device_present(pymap)
+        return ret
     else:
         return user32.DefWindowProcW(hwnd, message, w_param, l_param)
     return 0
