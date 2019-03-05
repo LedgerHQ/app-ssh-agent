@@ -22,6 +22,8 @@
 #include "os_io_seproxyhal.h"
 #include "string.h"
 
+#include "glyphs.h"
+
 unsigned int io_seproxyhal_touch_exit(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_sign_cancel(const bagl_element_t *e);
@@ -58,9 +60,18 @@ unsigned int io_seproxyhal_touch_ecdh_cancel(const bagl_element_t *e);
 #define DEPTH_USER 1
 #define DEPTH_LAST 6
 
+// A path contains 10 elements max, which max length in ascii is 1 whitespace + 10 char + optional quote "'" + "/" + \0"
+#define MAX_DERIV_PATH_ASCII_LENGTH 1 + 10*(10+2) + 1 
+
 unsigned char G_io_seproxyhal_spi_buffer[IO_SEPROXYHAL_BUFFER_SIZE_B];
 
-ux_state_t ux;
+#ifdef TARGET_NANOX
+#include "ux.h"
+    ux_state_t G_ux;
+    bolos_ux_params_t G_ux_params;
+#else // TARGET_NANOX
+    ux_state_t ux;
+#endif // TARGET_NANOX
 
 // display stepped screens
 unsigned int ux_step;
@@ -151,22 +162,50 @@ bagl_element_t const ui_address_blue[] = {
 
     {{BAGL_LABEL, 0x00, 0, 147, 320, 32, 0, 0, 0, 0x000000, 0xF9F9F9,
       BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Get public key for path",
+     "Get public key for path:",
      0,
      0,
      0,
      NULL,
      NULL,
      NULL},
-    {{BAGL_LABEL, 0x00, 0, 280, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_16px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+    {{BAGL_LABEL, 0x00, 0, 297, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
+      BAGL_FONT_OPEN_SANS_SEMIBOLD_11_16PX | BAGL_FONT_ALIGNMENT_CENTER, 0},
      (const char *)keyPath,
      0,
      0,
      0,
      NULL,
      NULL,
-     NULL}};
+     NULL},
+     {{BAGL_LABEL, 0x00, 0, 314, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
+      BAGL_FONT_OPEN_SANS_SEMIBOLD_11_16PX | BAGL_FONT_ALIGNMENT_CENTER, 0},
+     (const char *)keyPath+30,
+     0,
+     0,
+     0,
+     NULL,
+     NULL,
+     NULL},
+     {{BAGL_LABEL, 0x00, 0, 331, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
+      BAGL_FONT_OPEN_SANS_SEMIBOLD_11_16PX | BAGL_FONT_ALIGNMENT_CENTER, 0},
+     (const char *)keyPath+60,
+     0,
+     0,
+     0,
+     NULL,
+     NULL,
+     NULL},
+     {{BAGL_LABEL, 0x00, 0, 348, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
+      BAGL_FONT_OPEN_SANS_SEMIBOLD_11_16PX | BAGL_FONT_ALIGNMENT_CENTER, 0},
+     (const char *)keyPath+90,
+     0,
+     0,
+     0,
+     NULL,
+     NULL,
+     NULL}
+};
 
 unsigned int ui_address_blue_button(unsigned int button_mask,
                                     unsigned int button_mask_counter) {
@@ -233,15 +272,15 @@ static const bagl_element_t const ui_approval_ssh_blue[] = {
 
     {{BAGL_LABEL, 0x00, 0, 87, 320, 32, 0, 0, 0, 0x000000, 0xF9F9F9,
       BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Confirm SSH authentication with key",
+     "Confirm SSH authentication with key:",
      0,
      0,
      0,
      NULL,
      NULL,
      NULL},
-    {{BAGL_LABEL, 0x00, 0, 125, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_16px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+        {{BAGL_LABEL, 0x00, 0, 297, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
+      BAGL_FONT_OPEN_SANS_SEMIBOLD_11_16PX | BAGL_FONT_ALIGNMENT_CENTER, 0},
      (const char *)keyPath,
      0,
      0,
@@ -249,6 +288,33 @@ static const bagl_element_t const ui_approval_ssh_blue[] = {
      NULL,
      NULL,
      NULL},
+     {{BAGL_LABEL, 0x00, 0, 314, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
+      BAGL_FONT_OPEN_SANS_SEMIBOLD_11_16PX | BAGL_FONT_ALIGNMENT_CENTER, 0},
+     (const char *)keyPath+30,
+     0,
+     0,
+     0,
+     NULL,
+     NULL,
+     NULL},
+     {{BAGL_LABEL, 0x00, 0, 331, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
+      BAGL_FONT_OPEN_SANS_SEMIBOLD_11_16PX | BAGL_FONT_ALIGNMENT_CENTER, 0},
+     (const char *)keyPath+60,
+     0,
+     0,
+     0,
+     NULL,
+     NULL,
+     NULL},
+     {{BAGL_LABEL, 0x00, 0, 348, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
+      BAGL_FONT_OPEN_SANS_SEMIBOLD_11_16PX | BAGL_FONT_ALIGNMENT_CENTER, 0},
+     (const char *)keyPath+90,
+     0,
+     0,
+     0,
+     NULL,
+     NULL,
+     NULL}
 };
 
 unsigned int ui_approval_ssh_blue_button(unsigned int button_mask,
@@ -316,15 +382,15 @@ static const bagl_element_t const ui_approval_pgp_blue[] = {
 
     {{BAGL_LABEL, 0x00, 0, 87, 320, 32, 0, 0, 0, 0x000000, 0xF9F9F9,
       BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Confirm PGP import with key",
+     "Confirm PGP signature with key:",
      0,
      0,
      0,
      NULL,
      NULL,
      NULL},
-    {{BAGL_LABEL, 0x00, 0, 125, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_16px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+        {{BAGL_LABEL, 0x00, 0, 297, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
+      BAGL_FONT_OPEN_SANS_SEMIBOLD_11_16PX | BAGL_FONT_ALIGNMENT_CENTER, 0},
      (const char *)keyPath,
      0,
      0,
@@ -332,6 +398,33 @@ static const bagl_element_t const ui_approval_pgp_blue[] = {
      NULL,
      NULL,
      NULL},
+     {{BAGL_LABEL, 0x00, 0, 314, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
+      BAGL_FONT_OPEN_SANS_SEMIBOLD_11_16PX | BAGL_FONT_ALIGNMENT_CENTER, 0},
+     (const char *)keyPath+30,
+     0,
+     0,
+     0,
+     NULL,
+     NULL,
+     NULL},
+     {{BAGL_LABEL, 0x00, 0, 331, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
+      BAGL_FONT_OPEN_SANS_SEMIBOLD_11_16PX | BAGL_FONT_ALIGNMENT_CENTER, 0},
+     (const char *)keyPath+60,
+     0,
+     0,
+     0,
+     NULL,
+     NULL,
+     NULL},
+     {{BAGL_LABEL, 0x00, 0, 348, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
+      BAGL_FONT_OPEN_SANS_SEMIBOLD_11_16PX | BAGL_FONT_ALIGNMENT_CENTER, 0},
+     (const char *)keyPath+90,
+     0,
+     0,
+     0,
+     NULL,
+     NULL,
+     NULL}
 };
 
 unsigned int ui_approval_pgp_blue_button(unsigned int button_mask,
@@ -399,15 +492,15 @@ static const bagl_element_t const ui_approval_pgp_ecdh_blue[] = {
 
     {{BAGL_LABEL, 0x00, 0, 87, 320, 32, 0, 0, 0, 0x000000, 0xF9F9F9,
       BAGL_FONT_OPEN_SANS_LIGHT_14px | BAGL_FONT_ALIGNMENT_CENTER, 0},
-     "Confirm PGP ECDH with key",
+     "Confirm PGP ECDH with key:",
      0,
      0,
      0,
      NULL,
      NULL,
      NULL},
-    {{BAGL_LABEL, 0x00, 0, 125, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
-      BAGL_FONT_OPEN_SANS_LIGHT_16px | BAGL_FONT_ALIGNMENT_CENTER, 0},
+        {{BAGL_LABEL, 0x00, 0, 297, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
+      BAGL_FONT_OPEN_SANS_SEMIBOLD_11_16PX | BAGL_FONT_ALIGNMENT_CENTER, 0},
      (const char *)keyPath,
      0,
      0,
@@ -415,6 +508,33 @@ static const bagl_element_t const ui_approval_pgp_ecdh_blue[] = {
      NULL,
      NULL,
      NULL},
+     {{BAGL_LABEL, 0x00, 0, 314, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
+      BAGL_FONT_OPEN_SANS_SEMIBOLD_11_16PX | BAGL_FONT_ALIGNMENT_CENTER, 0},
+     (const char *)keyPath+30,
+     0,
+     0,
+     0,
+     NULL,
+     NULL,
+     NULL},
+     {{BAGL_LABEL, 0x00, 0, 331, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
+      BAGL_FONT_OPEN_SANS_SEMIBOLD_11_16PX | BAGL_FONT_ALIGNMENT_CENTER, 0},
+     (const char *)keyPath+60,
+     0,
+     0,
+     0,
+     NULL,
+     NULL,
+     NULL},
+     {{BAGL_LABEL, 0x00, 0, 348, 320, 33, 0, 0, 0, 0x000000, 0xF9F9F9,
+      BAGL_FONT_OPEN_SANS_SEMIBOLD_11_16PX | BAGL_FONT_ALIGNMENT_CENTER, 0},
+     (const char *)keyPath+90,
+     0,
+     0,
+     0,
+     NULL,
+     NULL,
+     NULL}
 };
 
 unsigned int
@@ -751,14 +871,6 @@ unsigned int
 ui_approval_pgp_ecdh_nanos_button(unsigned int button_mask,
                                   unsigned int button_mask_counter);
 
-void ui_idle(void) {
-    if (os_seph_features() &
-        SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
-        UX_DISPLAY(ui_idle_blue, NULL);
-    } else {
-        UX_DISPLAY(ui_idle_nanos, NULL);
-    }
-}
 
 unsigned int ui_approval_ssh_prepro(const bagl_element_t *element) {
     if (element->component.userid > 0) {
@@ -774,6 +886,148 @@ unsigned int ui_approval_ssh_prepro(const bagl_element_t *element) {
     }
     return 1;
 }
+
+#if defined(TARGET_NANOX)
+//////////////////////////////////////////////////////////////////////
+UX_FLOW_DEF_NOCB(
+    ux_idle_flow_1_step, 
+    bn, 
+    {
+      "Application",
+      "is ready",
+    });
+UX_FLOW_DEF_NOCB(
+    ux_idle_flow_2_step, 
+    bn, 
+    {
+      "Version",
+      APPVERSION,
+    });
+UX_FLOW_DEF_VALID(
+    ux_idle_flow_3_step,
+    pb,
+    os_sched_exit(-1),
+    {
+      &C_icon_dashboard,
+      "Quit",
+    });
+const ux_flow_step_t *        const ux_idle_flow [] = {
+  &ux_idle_flow_1_step,
+  &ux_idle_flow_2_step,
+  &ux_idle_flow_3_step,
+  FLOW_END_STEP,
+};
+
+//////////////////////////////////////////////////////////////////////
+UX_FLOW_DEF_VALID(
+    ux_address_flow_1_step, 
+    pbb,
+    io_seproxyhal_touch_address_ok(NULL),
+    {
+      &C_icon_validate_14,
+      "Provide",
+      "public key?"
+    });
+UX_FLOW_DEF_VALID(
+    ux_address_flow_2_step, 
+    pb,
+    io_seproxyhal_touch_address_cancel(NULL),
+    {
+      &C_icon_crossmark,
+      "Cancel"
+    });
+
+const ux_flow_step_t *        const ux_address_flow [] = {
+  &ux_address_flow_1_step,
+  &ux_address_flow_2_step,
+  FLOW_END_STEP,
+};
+
+//////////////////////////////////////////////////////////////////////
+UX_FLOW_DEF_VALID(
+    ux_approval_ssh_flow_1_step, 
+    pbb,
+    io_seproxyhal_touch_sign_ok(NULL),
+    {
+        &C_icon_validate_14,
+      "Connect SSH user",
+      (char *)operationContext.userName
+    });
+/*UX_FLOW_DEF_VALID(
+    ux_approval_ssh_flow_2_step, 
+    pb,
+    io_seproxyhal_touch_sign_ok(NULL),
+    {
+      &C_icon_validate_14,
+      "Authenticate?"
+    });*/
+UX_FLOW_DEF_VALID(
+    ux_approval_ssh_flow_3_step, 
+    pb,
+    io_seproxyhal_touch_sign_cancel(NULL),
+    {
+      &C_icon_crossmark,
+      "Cancel"
+    });
+
+const ux_flow_step_t *        const ux_approval_ssh_flow [] = {
+  &ux_approval_ssh_flow_1_step,
+  //&ux_approval_ssh_flow_2_step,
+  &ux_approval_ssh_flow_3_step,
+  FLOW_END_STEP,
+};
+
+//////////////////////////////////////////////////////////////////////
+UX_FLOW_DEF_VALID(
+    ux_approval_pgp_flow_1_step, 
+    pbb,
+    io_seproxyhal_touch_sign_ok(NULL),
+    {
+      &C_icon_validate_14,
+      "PGP Agent",
+      "Sign?"
+    });
+UX_FLOW_DEF_VALID(
+    ux_approval_pgp_flow_2_step, 
+    pb,
+    io_seproxyhal_touch_sign_cancel(NULL),
+    {
+      &C_icon_crossmark,
+      "Cancel"
+    });
+
+const ux_flow_step_t *        const ux_approval_pgp_flow [] = {
+  &ux_approval_pgp_flow_1_step,
+  &ux_approval_pgp_flow_2_step,
+  FLOW_END_STEP,
+};
+
+//////////////////////////////////////////////////////////////////////
+UX_FLOW_DEF_VALID(
+    ux_approval_pgp_ecdh_flow_1_step, 
+    pbb,
+    io_seproxyhal_touch_sign_ok(NULL),
+    {
+      &C_icon_validate_14,
+      "PGP Agent",
+      "ECDH?"
+    });
+UX_FLOW_DEF_VALID(
+    ux_approval_pgp_ecdh_flow_2_step, 
+    pb,
+    io_seproxyhal_touch_sign_cancel(NULL),
+    {
+      &C_icon_crossmark,
+      "Cancel"
+    });
+
+const ux_flow_step_t *        const ux_approval_pgp_ecdh_flow [] = {
+  &ux_approval_pgp_ecdh_flow_1_step,
+  &ux_approval_pgp_ecdh_flow_2_step,
+  FLOW_END_STEP,
+};
+
+#endif // TARGET_ID NANOX
 
 uint32_t path_item_to_string(char *dest, uint32_t number) {
     uint32_t offset = 0;
@@ -805,26 +1059,73 @@ uint32_t path_item_to_string(char *dest, uint32_t number) {
     return destOffset;
 }
 
-uint32_t path_to_string(char *dest) {
-    uint8_t i;
-    uint32_t offset = 0;
-    for (i = 0; i < operationContext.pathLength; i++) {
-        uint32_t length =
-            path_item_to_string(dest + offset, operationContext.bip32Path[i]);
-        offset += length;
-        offset--;
-        if (i != operationContext.pathLength - 1) {
-            dest[offset++] = '/';
-        }
+
+// Print a BIP32 path as an ascii string to display on the device screen
+// On the Ledger Blue, if the string is longer than 30 char, the string will be split in multiple lines
+unsigned char bip32_print_path(uint32_t *bip32Path, unsigned char bip32PathLength, char* out, unsigned char max_out_len) {
+
+    unsigned char i, offset;
+    uint32_t current_level;
+    bool hardened;
+
+    if (bip32PathLength > MAX_BIP32_PATH) {
+        THROW(INVALID_PARAMETER);
     }
-    dest[offset++] = '\0';
-    return offset;
+    out[0] = ' ';
+    offset=1;
+    for (i = 0; i < bip32PathLength; i++) {
+        current_level = bip32Path[i];
+        hardened = (bool)(current_level & 0x80000000);
+        if(hardened) {
+            //remove hardening flag
+            current_level ^= 0x80000000;
+        }
+        snprintf(out+offset, max_out_len-offset, "%u", current_level);
+        offset = strnlen(out, max_out_len);
+        if(offset >= max_out_len - 2) THROW(EXCEPTION_OVERFLOW);
+        if(hardened) out[offset++] = '\''; 
+
+        out[offset++] = '/';
+        out[offset] = '\0';
+    }
+    // remove last '/'
+    out[offset-1] = '\0';
+
+#if defined(TARGET_BLUE)
+    // if the path is longer than 30 char, split the string in multiple strings of length 30 
+    uint8_t len=strnlen(out, MAX_DERIV_PATH_ASCII_LENGTH);
+    uint8_t num_split = len/30;
+
+
+    for(i = 1; i<= num_split; i++) {
+        os_memmove(out+30*i, out+(30*i-1), len-29*i);
+        out[30*i-1] = '\0';
+    }
+#endif
+
+    return offset -1;
 }
 
 unsigned int io_seproxyhal_touch_exit(const bagl_element_t *e) {
     // Go back to the dashboard
     os_sched_exit(0);
     return 0; // do not redraw the widget
+}
+
+void ui_idle(void) {
+ux_step_count = 0;
+
+#if defined(TARGET_BLUE)
+    UX_DISPLAY(ui_idle_blue, NULL);
+#elif defined(TARGET_NANOS)
+    UX_DISPLAY(ui_idle_nanos, NULL);
+#elif defined(TARGET_NANOX)
+    // reserve a display stack slot if none yet
+    if(G_ux.stack_count == 0) {
+        ux_stack_push();
+    }
+    ux_flow_init(0, ux_idle_flow, NULL);
+#endif
 }
 
 unsigned int ui_idle_nanos_button(unsigned int button_mask,
@@ -849,15 +1150,26 @@ unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e) {
     } else {
         os_memmove(hash, operationContext.hashData, 32);
     }
+
 #if CX_APILEVEL >= 5
+    if (operationContext.curve == CX_CURVE_Ed25519) {
+#ifdef TARGET_BLUE
+        os_perso_derive_node_bip32(CX_CURVE_Ed25519, operationContext.bip32Path, operationContext.pathLength, privateKeyData, NULL);
+#else
+        os_perso_derive_node_bip32_seed_key(HDW_ED25519_SLIP10, CX_CURVE_Ed25519, operationContext.bip32Path, operationContext.pathLength, privateKeyData, NULL, (unsigned char*) "ed25519 seed", 12);
+#endif
+    }
+    else {
     os_perso_derive_node_bip32(
         operationContext.curve, operationContext.bip32Path,
         operationContext.pathLength, privateKeyData, NULL);
+    }
 #else
     os_perso_derive_seed_bip32(operationContext.bip32Path,
                                operationContext.pathLength, privateKeyData,
                                NULL);
 #endif
+    
     cx_ecfp_init_private_key(operationContext.curve, privateKeyData, 32,
                              &privateKey);
     os_memset(privateKeyData, 0, sizeof(privateKeyData));
@@ -936,10 +1248,20 @@ unsigned int io_seproxyhal_touch_ecdh_ok(const bagl_element_t *e) {
     uint8_t privateKeyData[32];
     cx_ecfp_private_key_t privateKey;
     uint32_t tx = 0;
+    
 #if CX_APILEVEL >= 5
-    os_perso_derive_node_bip32(
+    if (operationContext.curve == CX_CURVE_Ed25519) {
+#ifdef TARGET_BLUE
+        os_perso_derive_node_bip32(CX_CURVE_Ed25519, operationContext.bip32Path, operationContext.pathLength, privateKeyData, NULL);
+#else
+        os_perso_derive_node_bip32_seed_key(HDW_ED25519_SLIP10, CX_CURVE_Ed25519, operationContext.bip32Path, operationContext.pathLength, privateKeyData, NULL, (unsigned char*) "ed25519 seed", 12);
+#endif
+    }
+    else {
+        os_perso_derive_node_bip32(
         operationContext.curve, operationContext.bip32Path,
         operationContext.pathLength, privateKeyData, NULL);
+    }
 #else
     os_perso_derive_seed_bip32(operationContext.bip32Path,
                                operationContext.pathLength, privateKeyData,
@@ -1081,7 +1403,7 @@ unsigned short io_exchange_al(unsigned char channel, unsigned short tx_len) {
     return 0;
 }
 
-void sample_main(void) {
+void app_main(void) {
     volatile unsigned int rx = 0;
     volatile unsigned int tx = 0;
     volatile unsigned int flags = 0;
@@ -1125,7 +1447,7 @@ void sample_main(void) {
                         G_io_apdu_buffer[OFFSET_CDATA];
                     if ((operationContext.pathLength < 0x01) ||
                         (operationContext.pathLength > MAX_BIP32_PATH)) {
-                        screen_printf("Invalid path\n");
+                        PRINTF("Invalid path\n");
                         THROW(0x6a80);
                     }
 
@@ -1148,10 +1470,20 @@ void sample_main(void) {
 #endif
                         curve = CX_CURVE_Ed25519;
                     }
+
 #if CX_APILEVEL >= 5
-                    os_perso_derive_node_bip32(
+                    if (curve == CX_CURVE_Ed25519) {
+#ifdef TARGET_BLUE
+                        os_perso_derive_node_bip32(CX_CURVE_Ed25519, operationContext.bip32Path, operationContext.pathLength, privateKeyData, NULL);
+#else
+                        os_perso_derive_node_bip32_seed_key(HDW_ED25519_SLIP10, CX_CURVE_Ed25519, operationContext.bip32Path, operationContext.pathLength, privateKeyData, NULL, (unsigned char*) "ed25519 seed", 12);
+#endif
+                    }
+                    else {
+                        os_perso_derive_node_bip32(
                         curve, operationContext.bip32Path,
                         operationContext.pathLength, privateKeyData, NULL);
+                    }
 #else
                     os_perso_derive_seed_bip32(operationContext.bip32Path,
                                                operationContext.pathLength,
@@ -1175,13 +1507,19 @@ void sample_main(void) {
 #endif
                     os_memset(&privateKey, 0, sizeof(privateKey));
                     os_memset(privateKeyData, 0, sizeof(privateKeyData));
-                    path_to_string(keyPath);
-                    if (os_seph_features() &
-                        SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
-                        UX_DISPLAY(ui_address_blue, NULL);
-                    } else {
+                    bip32_print_path(operationContext.bip32Path, operationContext.pathLength, keyPath, sizeof(keyPath));
+
+                    #if defined(TARGET_BLUE)
+                         UX_DISPLAY(ui_address_blue, NULL);
+                    #elif defined(TARGET_NANOS)
                         UX_DISPLAY(ui_address_nanos, NULL);
-                    }
+                    #elif defined(TARGET_NANOX)
+                        // reserve a display stack slot if none yet
+                        if(G_ux.stack_count == 0) {
+                            ux_stack_push();
+                        }
+                        ux_flow_init(0, ux_address_flow, NULL);
+                    #endif
                     flags |= IO_ASYNCH_REPLY;
                 }
 
@@ -1206,7 +1544,7 @@ void sample_main(void) {
                         dataLength--;
                         if ((operationContext.pathLength < 0x01) ||
                             (operationContext.pathLength > MAX_BIP32_PATH)) {
-                            screen_printf("Invalid path\n");
+                            PRINTF("Invalid path\n");
                             THROW(0x6a80);
                         }
                         for (i = 0; i < operationContext.pathLength; i++) {
@@ -1331,16 +1669,21 @@ void sample_main(void) {
 
                     operationContext.userName[operationContext.userOffset] =
                         '\0';
-                    path_to_string(keyPath);
-                    if (os_seph_features() &
-                        SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
+                    bip32_print_path(operationContext.bip32Path, operationContext.pathLength, keyPath, sizeof(keyPath));
+   
+                    #if defined(TARGET_BLUE)
                         UX_DISPLAY(ui_approval_ssh_blue, NULL);
-                    } else {
+                    #elif defined(TARGET_NANOS)
                         ux_step = 0;
                         ux_step_count = 2;
-                        UX_DISPLAY(ui_approval_ssh_nanos,
-                                   ui_approval_ssh_prepro);
-                    }
+                        UX_DISPLAY(ui_approval_ssh_nanos, ui_approval_ssh_prepro);
+                    #elif defined(TARGET_NANOX)
+                        // reserve a display stack slot if none yet
+                        if(G_ux.stack_count == 0) {
+                            ux_stack_push();
+                        }
+                        ux_flow_init(0, ux_approval_ssh_flow, NULL);
+                    #endif
                     flags |= IO_ASYNCH_REPLY;
                 }
 
@@ -1365,7 +1708,7 @@ void sample_main(void) {
                         dataLength--;
                         if ((operationContext.pathLength < 0x01) ||
                             (operationContext.pathLength > MAX_BIP32_PATH)) {
-                            screen_printf("Invalid path\n");
+                            PRINTF("Invalid path\n");
                             THROW(0x6a80);
                         }
                         for (i = 0; i < operationContext.pathLength; i++) {
@@ -1392,13 +1735,19 @@ void sample_main(void) {
 
                     operationContext.curve =
                         (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
-                    path_to_string(keyPath);
-                    if (os_seph_features() &
-                        SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
+                    bip32_print_path(operationContext.bip32Path, operationContext.pathLength, keyPath, sizeof(keyPath));
+
+                    #if defined(TARGET_BLUE)
                         UX_DISPLAY(ui_approval_pgp_blue, NULL);
-                    } else {
+                    #elif defined(TARGET_NANOS)
                         UX_DISPLAY(ui_approval_pgp_nanos, NULL);
-                    }
+                    #elif defined(TARGET_NANOX)
+                        // reserve a display stack slot if none yet
+                        if(G_ux.stack_count == 0) {
+                            ux_stack_push();
+                        }
+                        ux_flow_init(0, ux_approval_pgp_flow, NULL);
+                    #endif
                     flags |= IO_ASYNCH_REPLY;
                 }
 
@@ -1421,7 +1770,7 @@ void sample_main(void) {
                     dataLength--;
                     if ((operationContext.pathLength < 0x01) ||
                         (operationContext.pathLength > MAX_BIP32_PATH)) {
-                        screen_printf("Invalid path\n");
+                        PRINTF("Invalid path\n");
                         THROW(0x6a80);
                     }
                     for (i = 0; i < operationContext.pathLength; i++) {
@@ -1440,13 +1789,18 @@ void sample_main(void) {
 
                     operationContext.curve =
                         (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
-                    path_to_string(keyPath);
-                    if (os_seph_features() &
-                        SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
+
+                    #if defined(TARGET_BLUE)
                         UX_DISPLAY(ui_approval_pgp_blue, NULL);
-                    } else {
+                    #elif defined(TARGET_NANOS)
                         UX_DISPLAY(ui_approval_pgp_nanos, NULL);
-                    }
+                    #elif defined(TARGET_NANOX)
+                        // reserve a display stack slot if none yet
+                        if(G_ux.stack_count == 0) {
+                            ux_stack_push();
+                        }
+                        ux_flow_init(0, ux_approval_pgp_flow, NULL);
+                    #endif
                     flags |= IO_ASYNCH_REPLY;
                 }
 
@@ -1469,7 +1823,7 @@ void sample_main(void) {
                     dataLength--;
                     if ((operationContext.pathLength < 0x01) ||
                         (operationContext.pathLength > MAX_BIP32_PATH)) {
-                        screen_printf("Invalid path\n");
+                        PRINTF("Invalid path\n");
                         THROW(0x6a80);
                     }
                     for (i = 0; i < operationContext.pathLength; i++) {
@@ -1486,13 +1840,19 @@ void sample_main(void) {
                         (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
                     cx_ecfp_init_public_key(operationContext.curve, dataBuffer,
                                             65, &operationContext.publicKey);
-                    path_to_string(keyPath);
-                    if (os_seph_features() &
-                        SEPROXYHAL_TAG_SESSION_START_EVENT_FEATURE_SCREEN_BIG) {
+                    bip32_print_path(operationContext.bip32Path, operationContext.pathLength, keyPath, sizeof(keyPath));
+  
+                    #if defined(TARGET_BLUE)
                         UX_DISPLAY(ui_approval_pgp_ecdh_blue, NULL);
-                    } else {
+                    #elif defined(TARGET_NANOS)
                         UX_DISPLAY(ui_approval_pgp_ecdh_nanos, NULL);
-                    }
+                    #elif defined(TARGET_NANOX)
+                        // reserve a display stack slot if none yet
+                        if(G_ux.stack_count == 0) {
+                            ux_stack_push();
+                        }
+                        ux_flow_init(0, ux_approval_pgp_ecdh_flow, NULL);
+                    #endif
                     flags |= IO_ASYNCH_REPLY;
                 }
 
@@ -1573,14 +1933,21 @@ unsigned char io_event(unsigned char channel) {
         break;
 
     case SEPROXYHAL_TAG_TICKER_EVENT:
-        // prepare next screen
-        ux_step = (ux_step + 1) % ux_step_count;
-        // redisplay screen
-        UX_REDISPLAY();
+        UX_TICKER_EVENT(G_io_seproxyhal_spi_buffer, {
+            // don't redisplay if UX not allowed (pin locked in the common bolos
+            // ux ?)
+            if (ux_step_count && UX_ALLOWED) {
+                // prepare next screen
+                ux_step = (ux_step + 1) % ux_step_count;
+                // redisplay screen
+                UX_REDISPLAY();
+            }
+        });
         break;
 
     // unknown events are acknowledged
     default:
+        UX_DEFAULT_EVENT();
         break;
     }
 
@@ -1616,11 +1983,22 @@ __attribute__((section(".boot"))) int main(void) {
         TRY {
             io_seproxyhal_init();
 
+#ifdef TARGET_NANOX
+            // grab the current plane mode setting
+            G_io_app.plane_mode = os_setting_get(OS_SETTING_PLANEMODE, NULL, 0);
+#endif // TARGET_NANOX
+
+            USB_power(0);
             USB_power(1);
 
             ui_idle();
 
-            sample_main();
+#ifdef HAVE_BLE
+            BLE_power(0, NULL);
+            BLE_power(1, "Nano X");
+#endif // HAVE_BLE
+
+            app_main();
         }
         CATCH_OTHER(e) {
         }

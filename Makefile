@@ -21,13 +21,21 @@ endif
 include $(BOLOS_SDK)/Makefile.defines
 
 APPNAME = "SSH/PGP Agent"
-APP_LOAD_PARAMS=--appFlags 0 --curve ed25519 --curve prime256r1 --path "44'/535348'" --path "13'" --path "17'" $(COMMON_LOAD_PARAMS) 
+APP_LOAD_PARAMS=--appFlags 0x200 --curve ed25519 --curve prime256r1 --path "44'/535348'" --path "13'" --path "17'" $(COMMON_LOAD_PARAMS) 
 APPVERSION_M=0
 APPVERSION_N=0
-APPVERSION_P=4
+APPVERSION_P=5
 APPVERSION=$(APPVERSION_M).$(APPVERSION_N).$(APPVERSION_P)
 
-ICONNAME=icon.gif
+ifeq ($(TARGET_NAME),TARGET_NANOS)
+ ICONNAME=nanos_app_ssh.gif
+ else
+	ifeq ($(TARGET_NAME),TARGET_NANOX)
+		ICONNAME=balenos_app_ssh.gif
+	else
+		ICONNAME=blue_app_ssh.gif
+	endif
+endif
 ################
 # Default rule #
 ################
@@ -38,15 +46,50 @@ all: default
 ############
 
 DEFINES   += OS_IO_SEPROXYHAL IO_SEPROXYHAL_BUFFER_SIZE_B=128
-DEFINES   += HAVE_BAGL HAVE_PRINTF 
+DEFINES   += HAVE_BAGL HAVE_SPRINTF
+#DEFINES   += HAVE_PRINTF PRINTF=screen_printf
+DEFINES   += PRINTF\(...\)=
+#DEFINES   += HAVE_PRINTF PRINTF=mcu_usb_printf
 DEFINES   += HAVE_IO_USB HAVE_L4_USBLIB IO_USB_MAX_ENDPOINTS=6 IO_HID_EP_LENGTH=64 HAVE_USB_APDU
-DEFINES   += VERSION=\"$(APPVERSION)\"
+DEFINES   += APPVERSION=\"$(APPVERSION)\"
+
+# U2F
+DEFINES   += HAVE_U2F HAVE_IO_U2F
+DEFINES   += U2F_PROXY_MAGIC=\"BTC\"
+DEFINES   += USB_SEGMENT_SIZE=64 
+DEFINES   += BLE_SEGMENT_SIZE=32 #max MTU, min 20
+
+DEFINES   += CX_COMPLIANCE_141
+
+ifeq ($(TARGET_NAME),TARGET_NANOX)
+DEFINES       += HAVE_BLE BLE_COMMAND_TIMEOUT_MS=2000
+DEFINES       += HAVE_BLE_APDU # basic ledger apdu transport over BLE
+
+DEFINES       += HAVE_GLO096 HAVE_UX_LEGACY
+DEFINES       += HAVE_BAGL BAGL_WIDTH=128 BAGL_HEIGHT=64
+DEFINES       += HAVE_BAGL_ELLIPSIS # long label truncation feature
+DEFINES       += HAVE_BAGL_FONT_OPEN_SANS_REGULAR_11PX
+DEFINES       += HAVE_BAGL_FONT_OPEN_SANS_EXTRABOLD_11PX
+DEFINES       += HAVE_BAGL_FONT_OPEN_SANS_LIGHT_16PX
+endif
 
 ##############
 #  Compiler  #
 ##############
-#GCCPATH   := $(BOLOS_ENV)/gcc-arm-none-eabi-5_3-2016q1/bin/
-#CLANGPATH := $(BOLOS_ENV)/clang-arm-fropi/bin/
+ifneq ($(BOLOS_ENV),)
+$(info BOLOS_ENV=$(BOLOS_ENV))
+CLANGPATH := $(BOLOS_ENV)/clang-arm-fropi/bin/
+GCCPATH := $(BOLOS_ENV)/gcc-arm-none-eabi-5_3-2016q1/bin/
+else
+$(info BOLOS_ENV is not set: falling back to CLANGPATH and GCCPATH)
+endif
+ifeq ($(CLANGPATH),)
+$(info CLANGPATH is not set: clang will be used from PATH)
+endif
+ifeq ($(GCCPATH),)
+$(info GCCPATH is not set: arm-none-eabi-* will be used from PATH)
+endif
+
 CC       := $(CLANGPATH)clang 
 
 #CFLAGS   += -O0
@@ -63,7 +106,12 @@ include $(BOLOS_SDK)/Makefile.glyphs
 
 ### computed variables
 APP_SOURCE_PATH  += src
-SDK_SOURCE_PATH  += lib_stusb lib_stusb_impl
+SDK_SOURCE_PATH  += lib_stusb lib_stusb_impl lib_u2f
+
+ifeq ($(TARGET_NAME),TARGET_NANOX)
+SDK_SOURCE_PATH  += lib_blewbxx lib_blewbxx_impl
+SDK_SOURCE_PATH  += lib_ux
+endif
 
 
 load: all
