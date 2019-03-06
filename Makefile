@@ -31,7 +31,7 @@ ifeq ($(TARGET_NAME),TARGET_NANOS)
  ICONNAME=nanos_app_ssh.gif
  else
 	ifeq ($(TARGET_NAME),TARGET_NANOX)
-		ICONNAME=balenos_app_ssh.gif
+		ICONNAME=nanox_app_ssh.gif
 	else
 		ICONNAME=blue_app_ssh.gif
 	endif
