@@ -126,3 +126,5 @@ include $(BOLOS_SDK)/Makefile.rules
 #add dependency on custom makefile filename
 dep/%.d: %.c Makefile
 
+listvariants:
+	@echo VARIANTS APP ssh
