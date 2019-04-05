@@ -889,21 +889,21 @@ unsigned int ui_approval_ssh_prepro(const bagl_element_t *element) {
 
 #if defined(TARGET_NANOX)
 //////////////////////////////////////////////////////////////////////
-UX_FLOW_DEF_NOCB(
+UX_STEP_NOCB(
     ux_idle_flow_1_step, 
     bn, 
     {
       "Application",
       "is ready",
     });
-UX_FLOW_DEF_NOCB(
+UX_STEP_NOCB(
     ux_idle_flow_2_step, 
     bn, 
     {
       "Version",
       APPVERSION,
     });
-UX_FLOW_DEF_VALID(
+UX_STEP_VALID(
     ux_idle_flow_3_step,
     pb,
     os_sched_exit(-1),
@@ -919,7 +919,7 @@ const ux_flow_step_t *        const ux_idle_flow [] = {
 };
 
 //////////////////////////////////////////////////////////////////////
-UX_FLOW_DEF_VALID(
+UX_STEP_VALID(
     ux_address_flow_1_step, 
     pbb,
     io_seproxyhal_touch_address_ok(NULL),
@@ -928,7 +928,7 @@ UX_FLOW_DEF_VALID(
       "Provide",
       "public key?"
     });
-UX_FLOW_DEF_VALID(
+UX_STEP_VALID(
     ux_address_flow_2_step, 
     pb,
     io_seproxyhal_touch_address_cancel(NULL),
@@ -944,7 +944,7 @@ const ux_flow_step_t *        const ux_address_flow [] = {
 };
 
 //////////////////////////////////////////////////////////////////////
-UX_FLOW_DEF_VALID(
+UX_STEP_VALID(
     ux_approval_ssh_flow_1_step, 
     pbb,
     io_seproxyhal_touch_sign_ok(NULL),
@@ -953,7 +953,7 @@ UX_FLOW_DEF_VALID(
       "Connect SSH user",
       (char *)operationContext.userName
     });
-/*UX_FLOW_DEF_VALID(
+/*UX_STEP_VALID(
     ux_approval_ssh_flow_2_step, 
     pb,
     io_seproxyhal_touch_sign_ok(NULL),
@@ -961,7 +961,7 @@ UX_FLOW_DEF_VALID(
       &C_icon_validate_14,
       "Authenticate?"
     });*/
-UX_FLOW_DEF_VALID(
+UX_STEP_VALID(
     ux_approval_ssh_flow_3_step, 
     pb,
     io_seproxyhal_touch_sign_cancel(NULL),
@@ -978,7 +978,7 @@ const ux_flow_step_t *        const ux_approval_ssh_flow [] = {
 };
 
 //////////////////////////////////////////////////////////////////////
-UX_FLOW_DEF_VALID(
+UX_STEP_VALID(
     ux_approval_pgp_flow_1_step, 
     pbb,
     io_seproxyhal_touch_sign_ok(NULL),
@@ -987,7 +987,7 @@ UX_FLOW_DEF_VALID(
       "PGP Agent",
       "Sign?"
     });
-UX_FLOW_DEF_VALID(
+UX_STEP_VALID(
     ux_approval_pgp_flow_2_step, 
     pb,
     io_seproxyhal_touch_sign_cancel(NULL),
@@ -1003,7 +1003,7 @@ const ux_flow_step_t *        const ux_approval_pgp_flow [] = {
 };
 
 //////////////////////////////////////////////////////////////////////
-UX_FLOW_DEF_VALID(
+UX_STEP_VALID(
     ux_approval_pgp_ecdh_flow_1_step, 
     pbb,
     io_seproxyhal_touch_sign_ok(NULL),
@@ -1012,7 +1012,7 @@ UX_FLOW_DEF_VALID(
       "PGP Agent",
       "ECDH?"
     });
-UX_FLOW_DEF_VALID(
+UX_STEP_VALID(
     ux_approval_pgp_ecdh_flow_2_step, 
     pb,
     io_seproxyhal_touch_sign_cancel(NULL),
