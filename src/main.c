@@ -65,13 +65,13 @@ unsigned int io_seproxyhal_touch_ecdh_cancel(const bagl_element_t *e);
 
 unsigned char G_io_seproxyhal_spi_buffer[IO_SEPROXYHAL_BUFFER_SIZE_B];
 
-#ifdef TARGET_NANOX
+#ifdef HAVE_UX_FLOW
 #include "ux.h"
     ux_state_t G_ux;
     bolos_ux_params_t G_ux_params;
-#else // TARGET_NANOX
+#else // HAVE_UX_FLOW
     ux_state_t ux;
-#endif // TARGET_NANOX
+#endif // HAVE_UX_FLOW
 
 // display stepped screens
 unsigned int ux_step;
@@ -102,6 +102,8 @@ typedef struct operationContext_t {
 
 char keyPath[200];
 operationContext_t operationContext;
+
+#if !defined(HAVE_UX_FLOW)
 
 bagl_element_t const ui_address_blue[] = {
     {{BAGL_RECTANGLE, 0x00, 0, 60, 320, 420, 0, 0, BAGL_FILL, 0xf9f9f9,
@@ -887,7 +889,9 @@ unsigned int ui_approval_ssh_prepro(const bagl_element_t *element) {
     return 1;
 }
 
-#if defined(TARGET_NANOX)
+#endif
+
+#if defined(HAVE_UX_FLOW)
 //////////////////////////////////////////////////////////////////////
 UX_STEP_NOCB(
     ux_idle_flow_1_step, 
@@ -950,7 +954,11 @@ UX_STEP_VALID(
     io_seproxyhal_touch_sign_ok(NULL),
     {
         &C_icon_validate_14,
+#if defined(TARGET_NANOS)        
+      "Allow SSH",
+#else      
       "Connect SSH user",
+#endif      
       (char *)operationContext.userName
     });
 /*UX_STEP_VALID(
@@ -1027,7 +1035,7 @@ const ux_flow_step_t *        const ux_approval_pgp_ecdh_flow [] = {
   FLOW_END_STEP,
 };
 
-#endif // TARGET_ID NANOX
+#endif // HAVE_UX_FLOW
 
 uint32_t path_item_to_string(char *dest, uint32_t number) {
     uint32_t offset = 0;
@@ -1117,14 +1125,14 @@ ux_step_count = 0;
 
 #if defined(TARGET_BLUE)
     UX_DISPLAY(ui_idle_blue, NULL);
-#elif defined(TARGET_NANOS)
-    UX_DISPLAY(ui_idle_nanos, NULL);
-#elif defined(TARGET_NANOX)
+#elif defined(HAVE_UX_FLOW)
     // reserve a display stack slot if none yet
     if(G_ux.stack_count == 0) {
         ux_stack_push();
     }
     ux_flow_init(0, ux_idle_flow, NULL);
+#elif defined(TARGET_NANOS)
+    UX_DISPLAY(ui_idle_nanos, NULL);
 #endif
 }
 
@@ -1511,14 +1519,14 @@ void app_main(void) {
 
                     #if defined(TARGET_BLUE)
                          UX_DISPLAY(ui_address_blue, NULL);
-                    #elif defined(TARGET_NANOS)
-                        UX_DISPLAY(ui_address_nanos, NULL);
-                    #elif defined(TARGET_NANOX)
+                    #elif defined(HAVE_UX_FLOW)
                         // reserve a display stack slot if none yet
                         if(G_ux.stack_count == 0) {
                             ux_stack_push();
                         }
                         ux_flow_init(0, ux_address_flow, NULL);
+                    #elif defined(TARGET_NANOS)
+                        UX_DISPLAY(ui_address_nanos, NULL);
                     #endif
                     flags |= IO_ASYNCH_REPLY;
                 }
@@ -1673,16 +1681,16 @@ void app_main(void) {
    
                     #if defined(TARGET_BLUE)
                         UX_DISPLAY(ui_approval_ssh_blue, NULL);
-                    #elif defined(TARGET_NANOS)
-                        ux_step = 0;
-                        ux_step_count = 2;
-                        UX_DISPLAY(ui_approval_ssh_nanos, ui_approval_ssh_prepro);
-                    #elif defined(TARGET_NANOX)
+                    #elif defined(HAVE_UX_FLOW)
                         // reserve a display stack slot if none yet
                         if(G_ux.stack_count == 0) {
                             ux_stack_push();
                         }
                         ux_flow_init(0, ux_approval_ssh_flow, NULL);
+                    #elif defined(TARGET_NANOS)
+                        ux_step = 0;
+                        ux_step_count = 2;
+                        UX_DISPLAY(ui_approval_ssh_nanos, ui_approval_ssh_prepro);
                     #endif
                     flags |= IO_ASYNCH_REPLY;
                 }
@@ -1739,14 +1747,14 @@ void app_main(void) {
 
                     #if defined(TARGET_BLUE)
                         UX_DISPLAY(ui_approval_pgp_blue, NULL);
-                    #elif defined(TARGET_NANOS)
-                        UX_DISPLAY(ui_approval_pgp_nanos, NULL);
-                    #elif defined(TARGET_NANOX)
+                    #elif defined(HAVE_UX_FLOW)
                         // reserve a display stack slot if none yet
                         if(G_ux.stack_count == 0) {
                             ux_stack_push();
                         }
                         ux_flow_init(0, ux_approval_pgp_flow, NULL);
+                    #elif defined(TARGET_NANOS)
+                        UX_DISPLAY(ui_approval_pgp_nanos, NULL);
                     #endif
                     flags |= IO_ASYNCH_REPLY;
                 }
@@ -1792,14 +1800,14 @@ void app_main(void) {
 
                     #if defined(TARGET_BLUE)
                         UX_DISPLAY(ui_approval_pgp_blue, NULL);
-                    #elif defined(TARGET_NANOS)
-                        UX_DISPLAY(ui_approval_pgp_nanos, NULL);
-                    #elif defined(TARGET_NANOX)
+                    #elif defined(HAVE_UX_FLOW)
                         // reserve a display stack slot if none yet
                         if(G_ux.stack_count == 0) {
                             ux_stack_push();
                         }
                         ux_flow_init(0, ux_approval_pgp_flow, NULL);
+                    #elif defined(TARGET_NANOS)
+                        UX_DISPLAY(ui_approval_pgp_nanos, NULL);
                     #endif
                     flags |= IO_ASYNCH_REPLY;
                 }
@@ -1844,14 +1852,14 @@ void app_main(void) {
   
                     #if defined(TARGET_BLUE)
                         UX_DISPLAY(ui_approval_pgp_ecdh_blue, NULL);
-                    #elif defined(TARGET_NANOS)
-                        UX_DISPLAY(ui_approval_pgp_ecdh_nanos, NULL);
-                    #elif defined(TARGET_NANOX)
+                    #elif defined(HAVE_UX_FLOW)
                         // reserve a display stack slot if none yet
                         if(G_ux.stack_count == 0) {
                             ux_stack_push();
                         }
                         ux_flow_init(0, ux_approval_pgp_ecdh_flow, NULL);
+                    #elif defined(TARGET_NANOS)
+                        UX_DISPLAY(ui_approval_pgp_ecdh_nanos, NULL);
                     #endif
                     flags |= IO_ASYNCH_REPLY;
                 }
