@@ -1529,20 +1529,10 @@ static void copy_message(uint8_t *dataBuffer, uint32_t available)
     operationContext.messageLength += available;
 }
 
-static void read_stuff(uint8_t **pDataBuffer, uint32_t *pDataLength)
+static void read_length(uint8_t *dataBuffer, uint32_t dataLength, uint8_t available)
 {
-    uint8_t *dataBuffer = *pDataBuffer;
-    uint32_t dataLength = *pDataLength;
-    uint8_t available = MIN(dataLength, 4 - operationContext.lengthOffset);
-
     os_memmove(operationContext.lengthBuffer + operationContext.lengthOffset,
                dataBuffer, available);
-
-    if (!operationContext.fullMessageHash) {
-        cx_hash(&operationContext.hash.header, 0, dataBuffer, available, NULL);
-    } else {
-        copy_message(dataBuffer, available);
-    }
 
     operationContext.lengthOffset += available;
     if (operationContext.lengthOffset == 4) {
@@ -1555,12 +1545,6 @@ static void read_stuff(uint8_t **pDataBuffer, uint32_t *pDataLength)
             operationContext.elementLength++;
         }
     }
-
-    dataBuffer += available;
-    dataLength -= available;
-
-    *pDataBuffer = dataBuffer;
-    *pDataLength = dataLength;
 }
 
 static void read_user_name(uint8_t *dataBuffer, uint32_t dataLength)
@@ -1578,18 +1562,8 @@ static void read_user_name(uint8_t *dataBuffer, uint32_t dataLength)
     operationContext.userOffset += userAvailable;
 }
 
-static void read_element(uint8_t **pDataBuffer, uint32_t *pDataLength)
+static void read_element(uint8_t *dataBuffer, uint32_t dataLength, uint32_t available)
 {
-    uint8_t *dataBuffer = *pDataBuffer;
-    uint32_t dataLength = *pDataLength;
-    uint32_t available = MIN(dataLength, operationContext.elementLength);
-
-    if (!operationContext.fullMessageHash) {
-        cx_hash(&operationContext.hash.header, 0, dataBuffer, available, NULL);
-    } else {
-        copy_message(dataBuffer, available);
-    }
-
     if ((operationContext.depth == DEPTH_USER) &&
         (operationContext.userOffset < MAX_USER_NAME)) {
         read_user_name(dataBuffer, dataLength);
@@ -1599,6 +1573,33 @@ static void read_element(uint8_t **pDataBuffer, uint32_t *pDataLength)
     if (operationContext.elementLength == 0) {
         operationContext.readingElement = false;
         operationContext.depth++;
+    }
+}
+
+static void read_blob(uint8_t **pDataBuffer, uint32_t *pDataLength, bool have_length)
+{
+    uint8_t *dataBuffer = *pDataBuffer;
+    uint32_t dataLength = *pDataLength;
+    uint32_t available;
+
+    if (!have_length) {
+        available = (uint8_t)MIN(dataLength, 4 - operationContext.lengthOffset);
+    }
+    else {
+        available = MIN(dataLength, operationContext.elementLength);
+    }
+
+    if (!operationContext.fullMessageHash) {
+        cx_hash(&operationContext.hash.header, 0, dataBuffer, available, NULL);
+    } else {
+        copy_message(dataBuffer, available);
+    }
+
+    if (!have_length) {
+        read_length(dataBuffer, dataLength, available);
+    }
+    else {
+        read_element(dataBuffer, dataLength, available);
     }
 
     dataBuffer += available;
@@ -1644,10 +1645,10 @@ static void ins_sign_ssh_blob(void)
             THROW(0x6a80);
         }
         if (!operationContext.readingElement) {
-            read_stuff(&dataBuffer, &dataLength);
+            read_blob(&dataBuffer, &dataLength, false);
         }
         if (operationContext.readingElement) {
-            read_element(&dataBuffer, &dataLength);
+            read_blob(&dataBuffer, &dataLength, true);
         }
     }
 
