@@ -1411,6 +1411,11 @@ unsigned short io_exchange_al(unsigned char channel, unsigned short tx_len) {
     return 0;
 }
 
+static bool is_curve_valid(uint8_t p2)
+{
+    return (p2 == P2_PRIME256) || (p2 == P2_CURVE25519);
+}
+
 static void check_path(uint8_t **pDataBuffer, uint32_t *pDataLength)
 {
     uint8_t *dataBuffer = *pDataBuffer;
@@ -1534,7 +1539,7 @@ static void ins_sign_ssh_blob(void)
     bool getPublicKey = ((p2 & P2_PUBLIC_KEY_MARKER) != 0);
     p2 &= ~P2_PUBLIC_KEY_MARKER;
 
-    if ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519)) {
+    if (!is_curve_valid(p2)) {
         THROW(0x6B00);
     }
 
@@ -1681,7 +1686,7 @@ static void ins_sign_generic_hash(void)
     bool last = ((p1 & P1_LAST_MARKER) != 0);
     p1 &= ~P1_LAST_MARKER;
 
-    if ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519)) {
+    if (!is_curve_valid(p2)) {
         THROW(0x6B00);
     }
 
@@ -1726,8 +1731,7 @@ static void ins_sign_direct_hash(void)
     uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
     uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
 
-    if ((p1 != 0) ||
-        ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519))) {
+    if ((p1 != 0) || !is_curve_valid(p2)) {
         THROW(0x6B00);
     }
 
@@ -1762,8 +1766,7 @@ static void ins_get_ecdh_secret(void)
     uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
     uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
 
-    if ((p1 != 0x00) ||
-        ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519))) {
+    if ((p1 != 0x00) || !is_curve_valid(p2)) {
         THROW(0x6B00);
     }
 
