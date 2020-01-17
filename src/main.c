@@ -1564,6 +1564,21 @@ static void read_stuff(uint8_t **pDataBuffer, uint32_t *pDataLength)
     *pDataLength = dataLength;
 }
 
+static void read_user_name(uint8_t *dataBuffer, uint32_t dataLength)
+{
+    uint32_t userAvailable;
+
+    if (operationContext.userOffset + dataLength > MAX_USER_NAME) {
+        userAvailable = MAX_USER_NAME - operationContext.userOffset;
+    }
+    else {
+        userAvailable = dataLength;
+    }
+
+    os_memmove(operationContext.userName, dataBuffer, userAvailable);
+    operationContext.userOffset += userAvailable;
+}
+
 static void read_element(uint8_t **pDataBuffer, uint32_t *pDataLength)
 {
     uint8_t *dataBuffer = *pDataBuffer;
@@ -1578,15 +1593,7 @@ static void read_element(uint8_t **pDataBuffer, uint32_t *pDataLength)
     }
     if ((operationContext.depth == DEPTH_USER) &&
         (operationContext.userOffset < MAX_USER_NAME)) {
-        uint32_t userAvailable =
-            ((operationContext.userOffset +
-              dataLength) > MAX_USER_NAME
-                 ? (MAX_USER_NAME -
-                    operationContext.userOffset)
-                 : dataLength);
-        os_memmove(operationContext.userName,
-                   dataBuffer, userAvailable);
-        operationContext.userOffset += userAvailable;
+        read_user_name(dataBuffer, dataLength);
     }
     dataBuffer += available;
     dataLength -= available;
