@@ -1037,6 +1037,11 @@ const ux_flow_step_t *        const ux_approval_pgp_ecdh_flow [] = {
 
 #endif // HAVE_UX_FLOW
 
+static uint32_t u32be(uint8_t *buf)
+{
+    return (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | (buf[3]);
+}
+
 uint32_t path_item_to_string(char *dest, uint32_t number) {
     uint32_t offset = 0;
     uint32_t startOffset = 0, destOffset = 0;
@@ -1437,9 +1442,7 @@ static void check_path(uint8_t **pDataBuffer, uint32_t *pDataLength)
     }
 
     for (i = 0; i < operationContext.pathLength; i++) {
-        operationContext.bip32Path[i] =
-            (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-            (dataBuffer[2] << 8) | (dataBuffer[3]);
+        operationContext.bip32Path[i] = u32be(dataBuffer);
         dataBuffer += 4;
         dataLength -= 4;
     }
@@ -1470,9 +1473,7 @@ static void ins_get_public_key(void)
         THROW(0x6B00);
     }
     for (i = 0; i < operationContext.pathLength; i++) {
-        operationContext.bip32Path[i] =
-            (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-            (dataBuffer[2] << 8) | (dataBuffer[3]);
+        operationContext.bip32Path[i] = u32be(dataBuffer);
         dataBuffer += 4;
     }
     if (G_io_apdu_buffer[OFFSET_P2] == P2_PRIME256) {
@@ -1566,11 +1567,7 @@ static void read_stuff(uint8_t **pDataBuffer, uint32_t *pDataLength)
     if (operationContext.lengthOffset == 4) {
         operationContext.lengthOffset = 0;
         operationContext.readingElement = true;
-        operationContext.elementLength =
-            (operationContext.lengthBuffer[0] << 24) |
-            (operationContext.lengthBuffer[1] << 16) |
-            (operationContext.lengthBuffer[2] << 8) |
-            (operationContext.lengthBuffer[3]);
+        operationContext.elementLength = u32be(operationContext.lengthBuffer);
         // Fixups
         if ((operationContext.depth ==
              DEPTH_REQUEST_1) ||
