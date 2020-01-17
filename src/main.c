@@ -1535,6 +1535,16 @@ static void ins_get_public_key(void)
     #endif
 }
 
+static void copy_message(uint8_t *dataBuffer, uint32_t available)
+{
+    if ((operationContext.messageLength + available) > MAX_MSG) {
+        THROW(0x6a80);
+    }
+    os_memmove(operationContext.message + operationContext.messageLength,
+               dataBuffer, available);
+    operationContext.messageLength += available;
+}
+
 static void read_stuff(uint8_t **pDataBuffer, uint32_t *pDataLength)
 {
     uint8_t *dataBuffer = *pDataBuffer;
@@ -1552,14 +1562,7 @@ static void read_stuff(uint8_t **pDataBuffer, uint32_t *pDataLength)
         cx_hash(&operationContext.hash.header, 0,
                 dataBuffer, available, NULL);
     } else {
-        if ((operationContext.messageLength +
-             available) > MAX_MSG) {
-            THROW(0x6a80);
-        }
-        os_memmove(operationContext.message +
-                       operationContext.messageLength,
-                   dataBuffer, available);
-        operationContext.messageLength += available;
+        copy_message(dataBuffer, available);
     }
     dataBuffer += available;
     dataLength -= available;
@@ -1598,14 +1601,7 @@ static void read_element(uint8_t **pDataBuffer, uint32_t *pDataLength)
         cx_hash(&operationContext.hash.header, 0,
                 dataBuffer, available, NULL);
     } else {
-        if ((operationContext.messageLength +
-             available) > MAX_MSG) {
-            THROW(0x6a80);
-        }
-        os_memmove(operationContext.message +
-                       operationContext.messageLength,
-                   dataBuffer, available);
-        operationContext.messageLength += available;
+        copy_message(dataBuffer, available);
     }
     if ((operationContext.depth == DEPTH_USER) &&
         (operationContext.userOffset < MAX_USER_NAME)) {
