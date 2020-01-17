@@ -1453,37 +1453,20 @@ static void check_path(uint8_t **pDataBuffer, uint32_t *pDataLength)
 
 static void ins_get_public_key(void)
 {
+    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
+    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
     uint8_t privateKeyData[32];
-    uint32_t i;
-    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA + 1;
+    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
     cx_ecfp_private_key_t privateKey;
     cx_curve_t curve;
 
-    operationContext.pathLength =
-        G_io_apdu_buffer[OFFSET_CDATA];
-    if ((operationContext.pathLength < 0x01) ||
-        (operationContext.pathLength > MAX_BIP32_PATH)) {
-        PRINTF("Invalid path\n");
-        THROW(0x6a80);
-    }
-
-    if ((G_io_apdu_buffer[OFFSET_P1] != 0) ||
-        ((G_io_apdu_buffer[OFFSET_P2] != P2_PRIME256) &&
-         (G_io_apdu_buffer[OFFSET_P2] != P2_CURVE25519))) {
+    if ((p1 != 0) || !is_curve_valid(p2)) {
         THROW(0x6B00);
     }
-    for (i = 0; i < operationContext.pathLength; i++) {
-        operationContext.bip32Path[i] = u32be(dataBuffer);
-        dataBuffer += 4;
-    }
-    if (G_io_apdu_buffer[OFFSET_P2] == P2_PRIME256) {
-        curve = CX_CURVE_256R1;
-    } else {
-#if 0
-        normalize_curve25519(privateKeyData);
-#endif
-        curve = CX_CURVE_Ed25519;
-    }
+
+    check_path(&dataBuffer, &dataLength);
+    curve = get_curve(p2);
 
 #if CX_APILEVEL >= 5
     if (curve == CX_CURVE_Ed25519) {
