@@ -1533,32 +1533,31 @@ static void read_stuff(uint8_t **pDataBuffer, uint32_t *pDataLength)
 {
     uint8_t *dataBuffer = *pDataBuffer;
     uint32_t dataLength = *pDataLength;
-
     uint8_t available = MIN(dataLength, 4 - operationContext.lengthOffset);
-    os_memmove(operationContext.lengthBuffer +
-                   operationContext.lengthOffset,
+
+    os_memmove(operationContext.lengthBuffer + operationContext.lengthOffset,
                dataBuffer, available);
+
     if (!operationContext.fullMessageHash) {
-        cx_hash(&operationContext.hash.header, 0,
-                dataBuffer, available, NULL);
+        cx_hash(&operationContext.hash.header, 0, dataBuffer, available, NULL);
     } else {
         copy_message(dataBuffer, available);
     }
-    dataBuffer += available;
-    dataLength -= available;
+
     operationContext.lengthOffset += available;
     if (operationContext.lengthOffset == 4) {
         operationContext.lengthOffset = 0;
         operationContext.readingElement = true;
         operationContext.elementLength = u32be(operationContext.lengthBuffer);
         // Fixups
-        if ((operationContext.depth ==
-             DEPTH_REQUEST_1) ||
-            (operationContext.depth ==
-             DEPTH_REQUEST_2)) {
+        if ((operationContext.depth == DEPTH_REQUEST_1) ||
+            (operationContext.depth == DEPTH_REQUEST_2)) {
             operationContext.elementLength++;
         }
     }
+
+    dataBuffer += available;
+    dataLength -= available;
 
     *pDataBuffer = dataBuffer;
     *pDataLength = dataLength;
@@ -1583,25 +1582,27 @@ static void read_element(uint8_t **pDataBuffer, uint32_t *pDataLength)
 {
     uint8_t *dataBuffer = *pDataBuffer;
     uint32_t dataLength = *pDataLength;
-
     uint32_t available = MIN(dataLength, operationContext.elementLength);
+
     if (!operationContext.fullMessageHash) {
-        cx_hash(&operationContext.hash.header, 0,
-                dataBuffer, available, NULL);
+        cx_hash(&operationContext.hash.header, 0, dataBuffer, available, NULL);
     } else {
         copy_message(dataBuffer, available);
     }
+
     if ((operationContext.depth == DEPTH_USER) &&
         (operationContext.userOffset < MAX_USER_NAME)) {
         read_user_name(dataBuffer, dataLength);
     }
-    dataBuffer += available;
-    dataLength -= available;
+
     operationContext.elementLength -= available;
     if (operationContext.elementLength == 0) {
         operationContext.readingElement = false;
         operationContext.depth++;
     }
+
+    dataBuffer += available;
+    dataLength -= available;
 
     *pDataBuffer = dataBuffer;
     *pDataLength = dataLength;
