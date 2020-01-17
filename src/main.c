@@ -1416,6 +1416,11 @@ static bool is_curve_valid(uint8_t p2)
     return (p2 == P2_PRIME256) || (p2 == P2_CURVE25519);
 }
 
+static cx_curve_t get_curve(uint8_t p2)
+{
+    return (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
+}
+
 static void check_path(uint8_t **pDataBuffer, uint32_t *pDataLength)
 {
     uint8_t *dataBuffer = *pDataBuffer;
@@ -1655,9 +1660,7 @@ static void ins_sign_ssh_blob(void)
         THROW(0x6a80);
     }
 
-    operationContext.curve =
-        (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
-
+    operationContext.curve = get_curve(p2);
     operationContext.userName[operationContext.userOffset] =
         '\0';
     bip32_print_path(operationContext.bip32Path, operationContext.pathLength, keyPath, sizeof(keyPath));
@@ -1707,8 +1710,7 @@ static void ins_sign_generic_hash(void)
         THROW(0x9000);
     }
 
-    operationContext.curve =
-        (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
+    operationContext.curve = get_curve(p2);
     bip32_print_path(operationContext.bip32Path, operationContext.pathLength, keyPath, sizeof(keyPath));
 
     #if defined(TARGET_BLUE)
@@ -1741,10 +1743,8 @@ static void ins_sign_direct_hash(void)
     }
     operationContext.direct = true;
     operationContext.getPublicKey = false;
+    operationContext.curve = get_curve(p2);
     os_memmove(operationContext.hashData, dataBuffer, 32);
-
-    operationContext.curve =
-        (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
 
     #if defined(TARGET_BLUE)
         UX_DISPLAY(ui_approval_pgp_blue, NULL);
@@ -1774,8 +1774,7 @@ static void ins_get_ecdh_secret(void)
     if (dataLength != 65) {
         THROW(0x6700);
     }
-    operationContext.curve =
-        (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
+    operationContext.curve = get_curve(p2);
     cx_ecfp_init_public_key(operationContext.curve, dataBuffer,
                             65, &operationContext.publicKey);
     bip32_print_path(operationContext.bip32Path, operationContext.pathLength, keyPath, sizeof(keyPath));
