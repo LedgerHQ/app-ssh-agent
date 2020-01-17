@@ -1535,6 +1535,52 @@ static void ins_get_public_key(void)
     #endif
 }
 
+static void read_element(uint8_t **pDataBuffer, uint32_t *pDataLength)
+{
+    uint8_t *dataBuffer = *pDataBuffer;
+    uint32_t dataLength = *pDataLength;
+
+    uint32_t available =
+        (dataLength > operationContext.elementLength
+             ? operationContext.elementLength
+             : dataLength);
+    if (!operationContext.fullMessageHash) {
+        cx_hash(&operationContext.hash.header, 0,
+                dataBuffer, available, NULL);
+    } else {
+        if ((operationContext.messageLength +
+             available) > MAX_MSG) {
+            THROW(0x6a80);
+        }
+        os_memmove(operationContext.message +
+                       operationContext.messageLength,
+                   dataBuffer, available);
+        operationContext.messageLength += available;
+    }
+    if ((operationContext.depth == DEPTH_USER) &&
+        (operationContext.userOffset < MAX_USER_NAME)) {
+        uint32_t userAvailable =
+            ((operationContext.userOffset +
+              dataLength) > MAX_USER_NAME
+                 ? (MAX_USER_NAME -
+                    operationContext.userOffset)
+                 : dataLength);
+        os_memmove(operationContext.userName,
+                   dataBuffer, userAvailable);
+        operationContext.userOffset += userAvailable;
+    }
+    dataBuffer += available;
+    dataLength -= available;
+    operationContext.elementLength -= available;
+    if (operationContext.elementLength == 0) {
+        operationContext.readingElement = false;
+        operationContext.depth++;
+    }
+
+    *pDataBuffer = dataBuffer;
+    *pDataLength = dataLength;
+}
+
 static void ins_sign_ssh_blob(void)
 {
     uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
@@ -1613,42 +1659,7 @@ static void ins_sign_ssh_blob(void)
             }
         }
         if (operationContext.readingElement) {
-            uint32_t available =
-                (dataLength > operationContext.elementLength
-                     ? operationContext.elementLength
-                     : dataLength);
-            if (!operationContext.fullMessageHash) {
-                cx_hash(&operationContext.hash.header, 0,
-                        dataBuffer, available, NULL);
-            } else {
-                if ((operationContext.messageLength +
-                     available) > MAX_MSG) {
-                    THROW(0x6a80);
-                }
-                os_memmove(operationContext.message +
-                               operationContext.messageLength,
-                           dataBuffer, available);
-                operationContext.messageLength += available;
-            }
-            if ((operationContext.depth == DEPTH_USER) &&
-                (operationContext.userOffset < MAX_USER_NAME)) {
-                uint32_t userAvailable =
-                    ((operationContext.userOffset +
-                      dataLength) > MAX_USER_NAME
-                         ? (MAX_USER_NAME -
-                            operationContext.userOffset)
-                         : dataLength);
-                os_memmove(operationContext.userName,
-                           dataBuffer, userAvailable);
-                operationContext.userOffset += userAvailable;
-            }
-            dataBuffer += available;
-            dataLength -= available;
-            operationContext.elementLength -= available;
-            if (operationContext.elementLength == 0) {
-                operationContext.readingElement = false;
-                operationContext.depth++;
-            }
+            read_element(&dataBuffer, &dataLength);
         }
     }
 
