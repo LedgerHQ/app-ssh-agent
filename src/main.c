@@ -1550,11 +1550,7 @@ static void read_stuff(uint8_t **pDataBuffer, uint32_t *pDataLength)
     uint8_t *dataBuffer = *pDataBuffer;
     uint32_t dataLength = *pDataLength;
 
-    uint8_t available =
-        (dataLength >
-                 (4 - operationContext.lengthOffset)
-             ? (4 - operationContext.lengthOffset)
-             : dataLength);
+    uint8_t available = MIN(dataLength, 4 - operationContext.lengthOffset);
     os_memmove(operationContext.lengthBuffer +
                    operationContext.lengthOffset,
                dataBuffer, available);
@@ -1593,10 +1589,7 @@ static void read_element(uint8_t **pDataBuffer, uint32_t *pDataLength)
     uint8_t *dataBuffer = *pDataBuffer;
     uint32_t dataLength = *pDataLength;
 
-    uint32_t available =
-        (dataLength > operationContext.elementLength
-             ? operationContext.elementLength
-             : dataLength);
+    uint32_t available = MIN(dataLength, operationContext.elementLength);
     if (!operationContext.fullMessageHash) {
         cx_hash(&operationContext.hash.header, 0,
                 dataBuffer, available, NULL);
