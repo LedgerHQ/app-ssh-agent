@@ -1535,6 +1535,56 @@ static void ins_get_public_key(void)
     #endif
 }
 
+static void read_stuff(uint8_t **pDataBuffer, uint32_t *pDataLength)
+{
+    uint8_t *dataBuffer = *pDataBuffer;
+    uint32_t dataLength = *pDataLength;
+
+    uint8_t available =
+        (dataLength >
+                 (4 - operationContext.lengthOffset)
+             ? (4 - operationContext.lengthOffset)
+             : dataLength);
+    os_memmove(operationContext.lengthBuffer +
+                   operationContext.lengthOffset,
+               dataBuffer, available);
+    if (!operationContext.fullMessageHash) {
+        cx_hash(&operationContext.hash.header, 0,
+                dataBuffer, available, NULL);
+    } else {
+        if ((operationContext.messageLength +
+             available) > MAX_MSG) {
+            THROW(0x6a80);
+        }
+        os_memmove(operationContext.message +
+                       operationContext.messageLength,
+                   dataBuffer, available);
+        operationContext.messageLength += available;
+    }
+    dataBuffer += available;
+    dataLength -= available;
+    operationContext.lengthOffset += available;
+    if (operationContext.lengthOffset == 4) {
+        operationContext.lengthOffset = 0;
+        operationContext.readingElement = true;
+        operationContext.elementLength =
+            (operationContext.lengthBuffer[0] << 24) |
+            (operationContext.lengthBuffer[1] << 16) |
+            (operationContext.lengthBuffer[2] << 8) |
+            (operationContext.lengthBuffer[3]);
+        // Fixups
+        if ((operationContext.depth ==
+             DEPTH_REQUEST_1) ||
+            (operationContext.depth ==
+             DEPTH_REQUEST_2)) {
+            operationContext.elementLength++;
+        }
+    }
+
+    *pDataBuffer = dataBuffer;
+    *pDataLength = dataLength;
+}
+
 static void read_element(uint8_t **pDataBuffer, uint32_t *pDataLength)
 {
     uint8_t *dataBuffer = *pDataBuffer;
@@ -1617,46 +1667,7 @@ static void ins_sign_ssh_blob(void)
             THROW(0x6a80);
         }
         if (!operationContext.readingElement) {
-            uint8_t available =
-                (dataLength >
-                         (4 - operationContext.lengthOffset)
-                     ? (4 - operationContext.lengthOffset)
-                     : dataLength);
-            os_memmove(operationContext.lengthBuffer +
-                           operationContext.lengthOffset,
-                       dataBuffer, available);
-            if (!operationContext.fullMessageHash) {
-                cx_hash(&operationContext.hash.header, 0,
-                        dataBuffer, available, NULL);
-            } else {
-                if ((operationContext.messageLength +
-                     available) > MAX_MSG) {
-                    THROW(0x6a80);
-                }
-                os_memmove(operationContext.message +
-                               operationContext.messageLength,
-                           dataBuffer, available);
-                operationContext.messageLength += available;
-            }
-            dataBuffer += available;
-            dataLength -= available;
-            operationContext.lengthOffset += available;
-            if (operationContext.lengthOffset == 4) {
-                operationContext.lengthOffset = 0;
-                operationContext.readingElement = true;
-                operationContext.elementLength =
-                    (operationContext.lengthBuffer[0] << 24) |
-                    (operationContext.lengthBuffer[1] << 16) |
-                    (operationContext.lengthBuffer[2] << 8) |
-                    (operationContext.lengthBuffer[3]);
-                // Fixups
-                if ((operationContext.depth ==
-                     DEPTH_REQUEST_1) ||
-                    (operationContext.depth ==
-                     DEPTH_REQUEST_2)) {
-                    operationContext.elementLength++;
-                }
-            }
+            read_stuff(&dataBuffer, &dataLength);
         }
         if (operationContext.readingElement) {
             read_element(&dataBuffer, &dataLength);
