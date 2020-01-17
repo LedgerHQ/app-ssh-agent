@@ -1411,6 +1411,418 @@ unsigned short io_exchange_al(unsigned char channel, unsigned short tx_len) {
     return 0;
 }
 
+static void ins_get_public_key(void)
+{
+    uint8_t privateKeyData[32];
+    uint32_t i;
+    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA + 1;
+    cx_ecfp_private_key_t privateKey;
+    cx_curve_t curve;
+
+    operationContext.pathLength =
+        G_io_apdu_buffer[OFFSET_CDATA];
+    if ((operationContext.pathLength < 0x01) ||
+        (operationContext.pathLength > MAX_BIP32_PATH)) {
+        PRINTF("Invalid path\n");
+        THROW(0x6a80);
+    }
+
+    if ((G_io_apdu_buffer[OFFSET_P1] != 0) ||
+        ((G_io_apdu_buffer[OFFSET_P2] != P2_PRIME256) &&
+         (G_io_apdu_buffer[OFFSET_P2] != P2_CURVE25519))) {
+        THROW(0x6B00);
+    }
+    for (i = 0; i < operationContext.pathLength; i++) {
+        operationContext.bip32Path[i] =
+            (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
+            (dataBuffer[2] << 8) | (dataBuffer[3]);
+        dataBuffer += 4;
+    }
+    if (G_io_apdu_buffer[OFFSET_P2] == P2_PRIME256) {
+        curve = CX_CURVE_256R1;
+    } else {
+#if 0
+        normalize_curve25519(privateKeyData);
+#endif
+        curve = CX_CURVE_Ed25519;
+    }
+
+#if CX_APILEVEL >= 5
+    if (curve == CX_CURVE_Ed25519) {
+#ifdef TARGET_BLUE
+        os_perso_derive_node_bip32(CX_CURVE_Ed25519, operationContext.bip32Path, operationContext.pathLength, privateKeyData, NULL);
+#else
+        os_perso_derive_node_bip32_seed_key(HDW_ED25519_SLIP10, CX_CURVE_Ed25519, operationContext.bip32Path, operationContext.pathLength, privateKeyData, NULL, (unsigned char*) "ed25519 seed", 12);
+#endif
+    }
+    else {
+        os_perso_derive_node_bip32(
+        curve, operationContext.bip32Path,
+        operationContext.pathLength, privateKeyData, NULL);
+    }
+#else
+    os_perso_derive_seed_bip32(operationContext.bip32Path,
+                               operationContext.pathLength,
+                               privateKeyData, NULL);
+#endif
+    cx_ecfp_init_private_key(curve, privateKeyData, 32,
+                             &privateKey);
+#if ((CX_APILEVEL >= 5) && (CX_APILEVEL < 7))
+    if (curve == CX_CURVE_Ed25519) {
+        cx_ecfp_init_public_key(curve, NULL, 0,
+                                &operationContext.publicKey);
+        cx_eddsa_get_public_key(&privateKey,
+                                &operationContext.publicKey);
+    } else {
+        cx_ecfp_generate_pair(
+            curve, &operationContext.publicKey, &privateKey, 1);
+    }
+#else
+    cx_ecfp_generate_pair(curve, &operationContext.publicKey,
+                          &privateKey, 1);
+#endif
+    os_memset(&privateKey, 0, sizeof(privateKey));
+    os_memset(privateKeyData, 0, sizeof(privateKeyData));
+    bip32_print_path(operationContext.bip32Path, operationContext.pathLength, keyPath, sizeof(keyPath));
+
+    #if defined(TARGET_BLUE)
+         UX_DISPLAY(ui_address_blue, NULL);
+    #elif defined(HAVE_UX_FLOW)
+        // reserve a display stack slot if none yet
+        if(G_ux.stack_count == 0) {
+            ux_stack_push();
+        }
+        ux_flow_init(0, ux_address_flow, NULL);
+    #elif defined(TARGET_NANOS)
+        UX_DISPLAY(ui_address_nanos, NULL);
+    #endif
+}
+
+static void ins_sign_ssh_blob(void)
+{
+    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
+    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
+    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
+    bool getPublicKey = ((p2 & P2_PUBLIC_KEY_MARKER) != 0);
+    p2 &= ~P2_PUBLIC_KEY_MARKER;
+
+    if ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519)) {
+        THROW(0x6B00);
+    }
+
+    if (p1 == P1_FIRST) {
+        uint32_t i;
+        operationContext.pathLength = *dataBuffer;
+        dataBuffer++;
+        dataLength--;
+        if ((operationContext.pathLength < 0x01) ||
+            (operationContext.pathLength > MAX_BIP32_PATH)) {
+            PRINTF("Invalid path\n");
+            THROW(0x6a80);
+        }
+        for (i = 0; i < operationContext.pathLength; i++) {
+            operationContext.bip32Path[i] =
+                (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
+                (dataBuffer[2] << 8) | (dataBuffer[3]);
+            dataBuffer += 4;
+            dataLength -= 4;
+        }
+        operationContext.fullMessageHash =
+            (p2 == P2_CURVE25519);
+        operationContext.getPublicKey = getPublicKey;
+        operationContext.messageLength = 0;
+        if (!operationContext.fullMessageHash) {
+            cx_sha256_init(&operationContext.hash);
+        }
+        operationContext.depth = 0;
+        operationContext.readingElement = false;
+        operationContext.lengthOffset = 0;
+        operationContext.userOffset = 0;
+        operationContext.direct = false;
+    } else if (p1 != P1_NEXT) {
+        THROW(0x6B00);
+    }
+
+    while (dataLength != 0) {
+        if (operationContext.depth >= DEPTH_LAST) {
+            THROW(0x6a80);
+        }
+        if (!operationContext.readingElement) {
+            uint8_t available =
+                (dataLength >
+                         (4 - operationContext.lengthOffset)
+                     ? (4 - operationContext.lengthOffset)
+                     : dataLength);
+            os_memmove(operationContext.lengthBuffer +
+                           operationContext.lengthOffset,
+                       dataBuffer, available);
+            if (!operationContext.fullMessageHash) {
+                cx_hash(&operationContext.hash.header, 0,
+                        dataBuffer, available, NULL);
+            } else {
+                if ((operationContext.messageLength +
+                     available) > MAX_MSG) {
+                    THROW(0x6a80);
+                }
+                os_memmove(operationContext.message +
+                               operationContext.messageLength,
+                           dataBuffer, available);
+                operationContext.messageLength += available;
+            }
+            dataBuffer += available;
+            dataLength -= available;
+            operationContext.lengthOffset += available;
+            if (operationContext.lengthOffset == 4) {
+                operationContext.lengthOffset = 0;
+                operationContext.readingElement = true;
+                operationContext.elementLength =
+                    (operationContext.lengthBuffer[0] << 24) |
+                    (operationContext.lengthBuffer[1] << 16) |
+                    (operationContext.lengthBuffer[2] << 8) |
+                    (operationContext.lengthBuffer[3]);
+                // Fixups
+                if ((operationContext.depth ==
+                     DEPTH_REQUEST_1) ||
+                    (operationContext.depth ==
+                     DEPTH_REQUEST_2)) {
+                    operationContext.elementLength++;
+                }
+            }
+        }
+        if (operationContext.readingElement) {
+            uint32_t available =
+                (dataLength > operationContext.elementLength
+                     ? operationContext.elementLength
+                     : dataLength);
+            if (!operationContext.fullMessageHash) {
+                cx_hash(&operationContext.hash.header, 0,
+                        dataBuffer, available, NULL);
+            } else {
+                if ((operationContext.messageLength +
+                     available) > MAX_MSG) {
+                    THROW(0x6a80);
+                }
+                os_memmove(operationContext.message +
+                               operationContext.messageLength,
+                           dataBuffer, available);
+                operationContext.messageLength += available;
+            }
+            if ((operationContext.depth == DEPTH_USER) &&
+                (operationContext.userOffset < MAX_USER_NAME)) {
+                uint32_t userAvailable =
+                    ((operationContext.userOffset +
+                      dataLength) > MAX_USER_NAME
+                         ? (MAX_USER_NAME -
+                            operationContext.userOffset)
+                         : dataLength);
+                os_memmove(operationContext.userName,
+                           dataBuffer, userAvailable);
+                operationContext.userOffset += userAvailable;
+            }
+            dataBuffer += available;
+            dataLength -= available;
+            operationContext.elementLength -= available;
+            if (operationContext.elementLength == 0) {
+                operationContext.readingElement = false;
+                operationContext.depth++;
+            }
+        }
+    }
+
+    if (operationContext.depth != DEPTH_LAST) {
+        THROW(0x9000);
+    }
+
+    if (operationContext.readingElement) {
+        THROW(0x6a80);
+    }
+
+    operationContext.curve =
+        (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
+
+    operationContext.userName[operationContext.userOffset] =
+        '\0';
+    bip32_print_path(operationContext.bip32Path, operationContext.pathLength, keyPath, sizeof(keyPath));
+
+    #if defined(TARGET_BLUE)
+        UX_DISPLAY(ui_approval_ssh_blue, NULL);
+    #elif defined(HAVE_UX_FLOW)
+        // reserve a display stack slot if none yet
+        if(G_ux.stack_count == 0) {
+            ux_stack_push();
+        }
+        ux_flow_init(0, ux_approval_ssh_flow, NULL);
+    #elif defined(TARGET_NANOS)
+        ux_step = 0;
+        ux_step_count = 2;
+        UX_DISPLAY(ui_approval_ssh_nanos, ui_approval_ssh_prepro);
+    #endif
+}
+
+static void ins_sign_generic_hash(void)
+{
+    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
+    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
+    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
+    bool last = ((p1 & P1_LAST_MARKER) != 0);
+    p1 &= ~P1_LAST_MARKER;
+
+    if ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519)) {
+        THROW(0x6B00);
+    }
+
+    if (p1 == P1_FIRST) {
+        uint32_t i;
+        operationContext.pathLength = *dataBuffer;
+        dataBuffer++;
+        dataLength--;
+        if ((operationContext.pathLength < 0x01) ||
+            (operationContext.pathLength > MAX_BIP32_PATH)) {
+            PRINTF("Invalid path\n");
+            THROW(0x6a80);
+        }
+        for (i = 0; i < operationContext.pathLength; i++) {
+            operationContext.bip32Path[i] =
+                (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
+                (dataBuffer[2] << 8) | (dataBuffer[3]);
+            dataBuffer += 4;
+            dataLength -= 4;
+        }
+        cx_sha256_init(&operationContext.hash);
+        operationContext.direct = false;
+        operationContext.getPublicKey = false;
+        operationContext.fullMessageHash = false;
+    } else if (p1 != P1_NEXT) {
+        THROW(0x6B00);
+    }
+
+    cx_hash(&operationContext.hash.header, 0, dataBuffer,
+            dataLength, NULL);
+
+    if (!last) {
+        THROW(0x9000);
+    }
+
+    operationContext.curve =
+        (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
+    bip32_print_path(operationContext.bip32Path, operationContext.pathLength, keyPath, sizeof(keyPath));
+
+    #if defined(TARGET_BLUE)
+        UX_DISPLAY(ui_approval_pgp_blue, NULL);
+    #elif defined(HAVE_UX_FLOW)
+        // reserve a display stack slot if none yet
+        if(G_ux.stack_count == 0) {
+            ux_stack_push();
+        }
+        ux_flow_init(0, ux_approval_pgp_flow, NULL);
+    #elif defined(TARGET_NANOS)
+        UX_DISPLAY(ui_approval_pgp_nanos, NULL);
+    #endif
+}
+
+static void ins_sign_direct_hash(void)
+{
+    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
+    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
+    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
+    uint32_t i;
+
+    if ((p1 != 0) ||
+        ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519))) {
+        THROW(0x6B00);
+    }
+
+    operationContext.pathLength = *dataBuffer;
+    dataBuffer++;
+    dataLength--;
+    if ((operationContext.pathLength < 0x01) ||
+        (operationContext.pathLength > MAX_BIP32_PATH)) {
+        PRINTF("Invalid path\n");
+        THROW(0x6a80);
+    }
+    for (i = 0; i < operationContext.pathLength; i++) {
+        operationContext.bip32Path[i] =
+            (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
+            (dataBuffer[2] << 8) | (dataBuffer[3]);
+        dataBuffer += 4;
+        dataLength -= 4;
+    }
+    if (dataLength != 32) {
+        THROW(0x6700);
+    }
+    operationContext.direct = true;
+    operationContext.getPublicKey = false;
+    os_memmove(operationContext.hashData, dataBuffer, 32);
+
+    operationContext.curve =
+        (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
+
+    #if defined(TARGET_BLUE)
+        UX_DISPLAY(ui_approval_pgp_blue, NULL);
+    #elif defined(HAVE_UX_FLOW)
+        // reserve a display stack slot if none yet
+        if(G_ux.stack_count == 0) {
+            ux_stack_push();
+        }
+        ux_flow_init(0, ux_approval_pgp_flow, NULL);
+    #elif defined(TARGET_NANOS)
+        UX_DISPLAY(ui_approval_pgp_nanos, NULL);
+    #endif
+}
+
+static void ins_get_ecdh_secret(void)
+{
+    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
+    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
+    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
+    uint32_t i;
+
+    if ((p1 != 0x00) ||
+        ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519))) {
+        THROW(0x6B00);
+    }
+
+    operationContext.pathLength = *dataBuffer;
+    dataBuffer++;
+    dataLength--;
+    if ((operationContext.pathLength < 0x01) ||
+        (operationContext.pathLength > MAX_BIP32_PATH)) {
+        PRINTF("Invalid path\n");
+        THROW(0x6a80);
+    }
+    for (i = 0; i < operationContext.pathLength; i++) {
+        operationContext.bip32Path[i] =
+            (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
+            (dataBuffer[2] << 8) | (dataBuffer[3]);
+        dataBuffer += 4;
+        dataLength -= 4;
+    }
+    if (dataLength != 65) {
+        THROW(0x6700);
+    }
+    operationContext.curve =
+        (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
+    cx_ecfp_init_public_key(operationContext.curve, dataBuffer,
+                            65, &operationContext.publicKey);
+    bip32_print_path(operationContext.bip32Path, operationContext.pathLength, keyPath, sizeof(keyPath));
+
+    #if defined(TARGET_BLUE)
+        UX_DISPLAY(ui_approval_pgp_ecdh_blue, NULL);
+    #elif defined(HAVE_UX_FLOW)
+        // reserve a display stack slot if none yet
+        if(G_ux.stack_count == 0) {
+            ux_stack_push();
+        }
+        ux_flow_init(0, ux_approval_pgp_ecdh_flow, NULL);
+    #elif defined(TARGET_NANOS)
+        UX_DISPLAY(ui_approval_pgp_ecdh_nanos, NULL);
+    #endif
+}
+
 void app_main(void) {
     volatile unsigned int rx = 0;
     volatile unsigned int tx = 0;
@@ -1444,427 +1856,30 @@ void app_main(void) {
                 }
 
                 switch (G_io_apdu_buffer[1]) {
-                case INS_GET_PUBLIC_KEY: {
-                    uint8_t privateKeyData[32];
-                    uint32_t i;
-                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA + 1;
-                    cx_ecfp_private_key_t privateKey;
-                    cx_curve_t curve;
-
-                    operationContext.pathLength =
-                        G_io_apdu_buffer[OFFSET_CDATA];
-                    if ((operationContext.pathLength < 0x01) ||
-                        (operationContext.pathLength > MAX_BIP32_PATH)) {
-                        PRINTF("Invalid path\n");
-                        THROW(0x6a80);
-                    }
-
-                    if ((G_io_apdu_buffer[OFFSET_P1] != 0) ||
-                        ((G_io_apdu_buffer[OFFSET_P2] != P2_PRIME256) &&
-                         (G_io_apdu_buffer[OFFSET_P2] != P2_CURVE25519))) {
-                        THROW(0x6B00);
-                    }
-                    for (i = 0; i < operationContext.pathLength; i++) {
-                        operationContext.bip32Path[i] =
-                            (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-                            (dataBuffer[2] << 8) | (dataBuffer[3]);
-                        dataBuffer += 4;
-                    }
-                    if (G_io_apdu_buffer[OFFSET_P2] == P2_PRIME256) {
-                        curve = CX_CURVE_256R1;
-                    } else {
-#if 0                        
-                        normalize_curve25519(privateKeyData);
-#endif
-                        curve = CX_CURVE_Ed25519;
-                    }
-
-#if CX_APILEVEL >= 5
-                    if (curve == CX_CURVE_Ed25519) {
-#ifdef TARGET_BLUE
-                        os_perso_derive_node_bip32(CX_CURVE_Ed25519, operationContext.bip32Path, operationContext.pathLength, privateKeyData, NULL);
-#else
-                        os_perso_derive_node_bip32_seed_key(HDW_ED25519_SLIP10, CX_CURVE_Ed25519, operationContext.bip32Path, operationContext.pathLength, privateKeyData, NULL, (unsigned char*) "ed25519 seed", 12);
-#endif
-                    }
-                    else {
-                        os_perso_derive_node_bip32(
-                        curve, operationContext.bip32Path,
-                        operationContext.pathLength, privateKeyData, NULL);
-                    }
-#else
-                    os_perso_derive_seed_bip32(operationContext.bip32Path,
-                                               operationContext.pathLength,
-                                               privateKeyData, NULL);
-#endif
-                    cx_ecfp_init_private_key(curve, privateKeyData, 32,
-                                             &privateKey);
-#if ((CX_APILEVEL >= 5) && (CX_APILEVEL < 7))
-                    if (curve == CX_CURVE_Ed25519) {
-                        cx_ecfp_init_public_key(curve, NULL, 0,
-                                                &operationContext.publicKey);
-                        cx_eddsa_get_public_key(&privateKey,
-                                                &operationContext.publicKey);
-                    } else {
-                        cx_ecfp_generate_pair(
-                            curve, &operationContext.publicKey, &privateKey, 1);
-                    }
-#else
-                    cx_ecfp_generate_pair(curve, &operationContext.publicKey,
-                                          &privateKey, 1);
-#endif
-                    os_memset(&privateKey, 0, sizeof(privateKey));
-                    os_memset(privateKeyData, 0, sizeof(privateKeyData));
-                    bip32_print_path(operationContext.bip32Path, operationContext.pathLength, keyPath, sizeof(keyPath));
-
-                    #if defined(TARGET_BLUE)
-                         UX_DISPLAY(ui_address_blue, NULL);
-                    #elif defined(HAVE_UX_FLOW)
-                        // reserve a display stack slot if none yet
-                        if(G_ux.stack_count == 0) {
-                            ux_stack_push();
-                        }
-                        ux_flow_init(0, ux_address_flow, NULL);
-                    #elif defined(TARGET_NANOS)
-                        UX_DISPLAY(ui_address_nanos, NULL);
-                    #endif
+                case INS_GET_PUBLIC_KEY:
+                    ins_get_public_key();
                     flags |= IO_ASYNCH_REPLY;
-                }
+                    break;
 
-                break;
-
-                case INS_SIGN_SSH_BLOB: {
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-                    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
-                    bool getPublicKey = ((p2 & P2_PUBLIC_KEY_MARKER) != 0);
-                    p2 &= ~P2_PUBLIC_KEY_MARKER;
-
-                    if ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519)) {
-                        THROW(0x6B00);
-                    }
-
-                    if (p1 == P1_FIRST) {
-                        uint32_t i;
-                        operationContext.pathLength = *dataBuffer;
-                        dataBuffer++;
-                        dataLength--;
-                        if ((operationContext.pathLength < 0x01) ||
-                            (operationContext.pathLength > MAX_BIP32_PATH)) {
-                            PRINTF("Invalid path\n");
-                            THROW(0x6a80);
-                        }
-                        for (i = 0; i < operationContext.pathLength; i++) {
-                            operationContext.bip32Path[i] =
-                                (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-                                (dataBuffer[2] << 8) | (dataBuffer[3]);
-                            dataBuffer += 4;
-                            dataLength -= 4;
-                        }
-                        operationContext.fullMessageHash =
-                            (p2 == P2_CURVE25519);
-                        operationContext.getPublicKey = getPublicKey;
-                        operationContext.messageLength = 0;
-                        if (!operationContext.fullMessageHash) {
-                            cx_sha256_init(&operationContext.hash);
-                        }
-                        operationContext.depth = 0;
-                        operationContext.readingElement = false;
-                        operationContext.lengthOffset = 0;
-                        operationContext.userOffset = 0;
-                        operationContext.direct = false;
-                    } else if (p1 != P1_NEXT) {
-                        THROW(0x6B00);
-                    }
-
-                    while (dataLength != 0) {
-                        if (operationContext.depth >= DEPTH_LAST) {
-                            THROW(0x6a80);
-                        }
-                        if (!operationContext.readingElement) {
-                            uint8_t available =
-                                (dataLength >
-                                         (4 - operationContext.lengthOffset)
-                                     ? (4 - operationContext.lengthOffset)
-                                     : dataLength);
-                            os_memmove(operationContext.lengthBuffer +
-                                           operationContext.lengthOffset,
-                                       dataBuffer, available);
-                            if (!operationContext.fullMessageHash) {
-                                cx_hash(&operationContext.hash.header, 0,
-                                        dataBuffer, available, NULL);
-                            } else {
-                                if ((operationContext.messageLength +
-                                     available) > MAX_MSG) {
-                                    THROW(0x6a80);
-                                }
-                                os_memmove(operationContext.message +
-                                               operationContext.messageLength,
-                                           dataBuffer, available);
-                                operationContext.messageLength += available;
-                            }
-                            dataBuffer += available;
-                            dataLength -= available;
-                            operationContext.lengthOffset += available;
-                            if (operationContext.lengthOffset == 4) {
-                                operationContext.lengthOffset = 0;
-                                operationContext.readingElement = true;
-                                operationContext.elementLength =
-                                    (operationContext.lengthBuffer[0] << 24) |
-                                    (operationContext.lengthBuffer[1] << 16) |
-                                    (operationContext.lengthBuffer[2] << 8) |
-                                    (operationContext.lengthBuffer[3]);
-                                // Fixups
-                                if ((operationContext.depth ==
-                                     DEPTH_REQUEST_1) ||
-                                    (operationContext.depth ==
-                                     DEPTH_REQUEST_2)) {
-                                    operationContext.elementLength++;
-                                }
-                            }
-                        }
-                        if (operationContext.readingElement) {
-                            uint32_t available =
-                                (dataLength > operationContext.elementLength
-                                     ? operationContext.elementLength
-                                     : dataLength);
-                            if (!operationContext.fullMessageHash) {
-                                cx_hash(&operationContext.hash.header, 0,
-                                        dataBuffer, available, NULL);
-                            } else {
-                                if ((operationContext.messageLength +
-                                     available) > MAX_MSG) {
-                                    THROW(0x6a80);
-                                }
-                                os_memmove(operationContext.message +
-                                               operationContext.messageLength,
-                                           dataBuffer, available);
-                                operationContext.messageLength += available;
-                            }
-                            if ((operationContext.depth == DEPTH_USER) &&
-                                (operationContext.userOffset < MAX_USER_NAME)) {
-                                uint32_t userAvailable =
-                                    ((operationContext.userOffset +
-                                      dataLength) > MAX_USER_NAME
-                                         ? (MAX_USER_NAME -
-                                            operationContext.userOffset)
-                                         : dataLength);
-                                os_memmove(operationContext.userName,
-                                           dataBuffer, userAvailable);
-                                operationContext.userOffset += userAvailable;
-                            }
-                            dataBuffer += available;
-                            dataLength -= available;
-                            operationContext.elementLength -= available;
-                            if (operationContext.elementLength == 0) {
-                                operationContext.readingElement = false;
-                                operationContext.depth++;
-                            }
-                        }
-                    }
-
-                    if (operationContext.depth != DEPTH_LAST) {
-                        THROW(0x9000);
-                    }
-
-                    if (operationContext.readingElement) {
-                        THROW(0x6a80);
-                    }
-
-                    operationContext.curve =
-                        (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
-
-                    operationContext.userName[operationContext.userOffset] =
-                        '\0';
-                    bip32_print_path(operationContext.bip32Path, operationContext.pathLength, keyPath, sizeof(keyPath));
-   
-                    #if defined(TARGET_BLUE)
-                        UX_DISPLAY(ui_approval_ssh_blue, NULL);
-                    #elif defined(HAVE_UX_FLOW)
-                        // reserve a display stack slot if none yet
-                        if(G_ux.stack_count == 0) {
-                            ux_stack_push();
-                        }
-                        ux_flow_init(0, ux_approval_ssh_flow, NULL);
-                    #elif defined(TARGET_NANOS)
-                        ux_step = 0;
-                        ux_step_count = 2;
-                        UX_DISPLAY(ui_approval_ssh_nanos, ui_approval_ssh_prepro);
-                    #endif
+                case INS_SIGN_SSH_BLOB:
+                    ins_sign_ssh_blob();
                     flags |= IO_ASYNCH_REPLY;
-                }
+                    break;
 
-                break;
-
-                case INS_SIGN_GENERIC_HASH: {
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-                    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
-                    bool last = ((p1 & P1_LAST_MARKER) != 0);
-                    p1 &= ~P1_LAST_MARKER;
-
-                    if ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519)) {
-                        THROW(0x6B00);
-                    }
-
-                    if (p1 == P1_FIRST) {
-                        uint32_t i;
-                        operationContext.pathLength = *dataBuffer;
-                        dataBuffer++;
-                        dataLength--;
-                        if ((operationContext.pathLength < 0x01) ||
-                            (operationContext.pathLength > MAX_BIP32_PATH)) {
-                            PRINTF("Invalid path\n");
-                            THROW(0x6a80);
-                        }
-                        for (i = 0; i < operationContext.pathLength; i++) {
-                            operationContext.bip32Path[i] =
-                                (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-                                (dataBuffer[2] << 8) | (dataBuffer[3]);
-                            dataBuffer += 4;
-                            dataLength -= 4;
-                        }
-                        cx_sha256_init(&operationContext.hash);
-                        operationContext.direct = false;
-                        operationContext.getPublicKey = false;
-                        operationContext.fullMessageHash = false;
-                    } else if (p1 != P1_NEXT) {
-                        THROW(0x6B00);
-                    }
-
-                    cx_hash(&operationContext.hash.header, 0, dataBuffer,
-                            dataLength, NULL);
-
-                    if (!last) {
-                        THROW(0x9000);
-                    }
-
-                    operationContext.curve =
-                        (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
-                    bip32_print_path(operationContext.bip32Path, operationContext.pathLength, keyPath, sizeof(keyPath));
-
-                    #if defined(TARGET_BLUE)
-                        UX_DISPLAY(ui_approval_pgp_blue, NULL);
-                    #elif defined(HAVE_UX_FLOW)
-                        // reserve a display stack slot if none yet
-                        if(G_ux.stack_count == 0) {
-                            ux_stack_push();
-                        }
-                        ux_flow_init(0, ux_approval_pgp_flow, NULL);
-                    #elif defined(TARGET_NANOS)
-                        UX_DISPLAY(ui_approval_pgp_nanos, NULL);
-                    #endif
+                case INS_SIGN_GENERIC_HASH:
+                    ins_sign_generic_hash();
                     flags |= IO_ASYNCH_REPLY;
-                }
+                    break;
 
-                break;
-
-                case INS_SIGN_DIRECT_HASH: {
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-                    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
-                    uint32_t i;
-
-                    if ((p1 != 0) ||
-                        ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519))) {
-                        THROW(0x6B00);
-                    }
-
-                    operationContext.pathLength = *dataBuffer;
-                    dataBuffer++;
-                    dataLength--;
-                    if ((operationContext.pathLength < 0x01) ||
-                        (operationContext.pathLength > MAX_BIP32_PATH)) {
-                        PRINTF("Invalid path\n");
-                        THROW(0x6a80);
-                    }
-                    for (i = 0; i < operationContext.pathLength; i++) {
-                        operationContext.bip32Path[i] =
-                            (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-                            (dataBuffer[2] << 8) | (dataBuffer[3]);
-                        dataBuffer += 4;
-                        dataLength -= 4;
-                    }
-                    if (dataLength != 32) {
-                        THROW(0x6700);
-                    }
-                    operationContext.direct = true;
-                    operationContext.getPublicKey = false;
-                    os_memmove(operationContext.hashData, dataBuffer, 32);
-
-                    operationContext.curve =
-                        (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
-
-                    #if defined(TARGET_BLUE)
-                        UX_DISPLAY(ui_approval_pgp_blue, NULL);
-                    #elif defined(HAVE_UX_FLOW)
-                        // reserve a display stack slot if none yet
-                        if(G_ux.stack_count == 0) {
-                            ux_stack_push();
-                        }
-                        ux_flow_init(0, ux_approval_pgp_flow, NULL);
-                    #elif defined(TARGET_NANOS)
-                        UX_DISPLAY(ui_approval_pgp_nanos, NULL);
-                    #endif
+                case INS_SIGN_DIRECT_HASH:
+                    ins_sign_direct_hash();
                     flags |= IO_ASYNCH_REPLY;
-                }
+                    break;
 
-                break;
-
-                case INS_GET_ECDH_SECRET: {
-                    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-                    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-                    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-                    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
-                    uint32_t i;
-
-                    if ((p1 != 0x00) ||
-                        ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519))) {
-                        THROW(0x6B00);
-                    }
-
-                    operationContext.pathLength = *dataBuffer;
-                    dataBuffer++;
-                    dataLength--;
-                    if ((operationContext.pathLength < 0x01) ||
-                        (operationContext.pathLength > MAX_BIP32_PATH)) {
-                        PRINTF("Invalid path\n");
-                        THROW(0x6a80);
-                    }
-                    for (i = 0; i < operationContext.pathLength; i++) {
-                        operationContext.bip32Path[i] =
-                            (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-                            (dataBuffer[2] << 8) | (dataBuffer[3]);
-                        dataBuffer += 4;
-                        dataLength -= 4;
-                    }
-                    if (dataLength != 65) {
-                        THROW(0x6700);
-                    }
-                    operationContext.curve =
-                        (p2 == P2_PRIME256 ? CX_CURVE_256R1 : CX_CURVE_Ed25519);
-                    cx_ecfp_init_public_key(operationContext.curve, dataBuffer,
-                                            65, &operationContext.publicKey);
-                    bip32_print_path(operationContext.bip32Path, operationContext.pathLength, keyPath, sizeof(keyPath));
-  
-                    #if defined(TARGET_BLUE)
-                        UX_DISPLAY(ui_approval_pgp_ecdh_blue, NULL);
-                    #elif defined(HAVE_UX_FLOW)
-                        // reserve a display stack slot if none yet
-                        if(G_ux.stack_count == 0) {
-                            ux_stack_push();
-                        }
-                        ux_flow_init(0, ux_approval_pgp_ecdh_flow, NULL);
-                    #elif defined(TARGET_NANOS)
-                        UX_DISPLAY(ui_approval_pgp_ecdh_nanos, NULL);
-                    #endif
+                case INS_GET_ECDH_SECRET:
+                    ins_get_ecdh_secret();
                     flags |= IO_ASYNCH_REPLY;
-                }
-
-                break;
+                    break;
 
                 case 0xFF: // return to dashboard
                     os_sched_exit(0);
