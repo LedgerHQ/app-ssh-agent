@@ -1411,6 +1411,33 @@ unsigned short io_exchange_al(unsigned char channel, unsigned short tx_len) {
     return 0;
 }
 
+static void check_path(uint8_t **pDataBuffer, uint32_t *pDataLength)
+{
+    uint8_t *dataBuffer = *pDataBuffer;
+    uint32_t dataLength = *pDataLength;
+    int i;
+
+    operationContext.pathLength = *dataBuffer;
+    dataBuffer++;
+    dataLength--;
+    if ((operationContext.pathLength < 0x01) ||
+        (operationContext.pathLength > MAX_BIP32_PATH)) {
+        PRINTF("Invalid path\n");
+        THROW(0x6a80);
+    }
+
+    for (i = 0; i < operationContext.pathLength; i++) {
+        operationContext.bip32Path[i] =
+            (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
+            (dataBuffer[2] << 8) | (dataBuffer[3]);
+        dataBuffer += 4;
+        dataLength -= 4;
+    }
+
+    *pDataBuffer = dataBuffer;
+    *pDataLength = dataLength;
+}
+
 static void ins_get_public_key(void)
 {
     uint8_t privateKeyData[32];
@@ -1512,22 +1539,7 @@ static void ins_sign_ssh_blob(void)
     }
 
     if (p1 == P1_FIRST) {
-        uint32_t i;
-        operationContext.pathLength = *dataBuffer;
-        dataBuffer++;
-        dataLength--;
-        if ((operationContext.pathLength < 0x01) ||
-            (operationContext.pathLength > MAX_BIP32_PATH)) {
-            PRINTF("Invalid path\n");
-            THROW(0x6a80);
-        }
-        for (i = 0; i < operationContext.pathLength; i++) {
-            operationContext.bip32Path[i] =
-                (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-                (dataBuffer[2] << 8) | (dataBuffer[3]);
-            dataBuffer += 4;
-            dataLength -= 4;
-        }
+        check_path(&dataBuffer, &dataLength);
         operationContext.fullMessageHash =
             (p2 == P2_CURVE25519);
         operationContext.getPublicKey = getPublicKey;
@@ -1674,22 +1686,7 @@ static void ins_sign_generic_hash(void)
     }
 
     if (p1 == P1_FIRST) {
-        uint32_t i;
-        operationContext.pathLength = *dataBuffer;
-        dataBuffer++;
-        dataLength--;
-        if ((operationContext.pathLength < 0x01) ||
-            (operationContext.pathLength > MAX_BIP32_PATH)) {
-            PRINTF("Invalid path\n");
-            THROW(0x6a80);
-        }
-        for (i = 0; i < operationContext.pathLength; i++) {
-            operationContext.bip32Path[i] =
-                (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-                (dataBuffer[2] << 8) | (dataBuffer[3]);
-            dataBuffer += 4;
-            dataLength -= 4;
-        }
+        check_path(&dataBuffer, &dataLength);
         cx_sha256_init(&operationContext.hash);
         operationContext.direct = false;
         operationContext.getPublicKey = false;
@@ -1728,28 +1725,13 @@ static void ins_sign_direct_hash(void)
     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
     uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
     uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
-    uint32_t i;
 
     if ((p1 != 0) ||
         ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519))) {
         THROW(0x6B00);
     }
 
-    operationContext.pathLength = *dataBuffer;
-    dataBuffer++;
-    dataLength--;
-    if ((operationContext.pathLength < 0x01) ||
-        (operationContext.pathLength > MAX_BIP32_PATH)) {
-        PRINTF("Invalid path\n");
-        THROW(0x6a80);
-    }
-    for (i = 0; i < operationContext.pathLength; i++) {
-        operationContext.bip32Path[i] =
-            (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-            (dataBuffer[2] << 8) | (dataBuffer[3]);
-        dataBuffer += 4;
-        dataLength -= 4;
-    }
+    check_path(&dataBuffer, &dataLength);
     if (dataLength != 32) {
         THROW(0x6700);
     }
@@ -1779,28 +1761,13 @@ static void ins_get_ecdh_secret(void)
     uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
     uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
     uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
-    uint32_t i;
 
     if ((p1 != 0x00) ||
         ((p2 != P2_PRIME256) && (p2 != P2_CURVE25519))) {
         THROW(0x6B00);
     }
 
-    operationContext.pathLength = *dataBuffer;
-    dataBuffer++;
-    dataLength--;
-    if ((operationContext.pathLength < 0x01) ||
-        (operationContext.pathLength > MAX_BIP32_PATH)) {
-        PRINTF("Invalid path\n");
-        THROW(0x6a80);
-    }
-    for (i = 0; i < operationContext.pathLength; i++) {
-        operationContext.bip32Path[i] =
-            (dataBuffer[0] << 24) | (dataBuffer[1] << 16) |
-            (dataBuffer[2] << 8) | (dataBuffer[3]);
-        dataBuffer += 4;
-        dataLength -= 4;
-    }
+    check_path(&dataBuffer, &dataLength);
     if (dataLength != 65) {
         THROW(0x6700);
     }
