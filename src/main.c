@@ -1811,7 +1811,7 @@ void app_main(void) {
                     THROW(0x6700);
                 }
 
-                if (G_io_apdu_buffer[0] != CLA) {
+                if (G_io_apdu_buffer[OFFSET_CLA] != CLA) {
                     THROW(0x6E00);
                 }
 
@@ -1824,7 +1824,7 @@ void app_main(void) {
                     THROW(0x6700);
                 }
 
-                switch (G_io_apdu_buffer[1]) {
+                switch (G_io_apdu_buffer[OFFSET_INS]) {
                 case INS_GET_PUBLIC_KEY:
                     ins_get_public_key(p1, p2, dataBuffer, dataLength);
                     flags |= IO_ASYNCH_REPLY;
