@@ -1866,6 +1866,7 @@ void app_main(void) {
                     break;
                 default:
                     sw = 0x6800 | (e & 0x7FF);
+                    os_memset(&operationContext, 0, sizeof(operationContext));
                     break;
                 }
                 // Unexpected exception => report
