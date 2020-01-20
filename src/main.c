@@ -1807,6 +1807,10 @@ void app_main(void) {
                     THROW(0x6982);
                 }
 
+                if (rx < OFFSET_CDATA) {
+                    THROW(0x6700);
+                }
+
                 if (G_io_apdu_buffer[0] != CLA) {
                     THROW(0x6E00);
                 }
@@ -1815,6 +1819,10 @@ void app_main(void) {
                 p2 = G_io_apdu_buffer[OFFSET_P2];
                 dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
                 dataLength = G_io_apdu_buffer[OFFSET_LC];
+
+                if (rx != OFFSET_CDATA + dataLength) {
+                    THROW(0x6700);
+                }
 
                 switch (G_io_apdu_buffer[1]) {
                 case INS_GET_PUBLIC_KEY:
