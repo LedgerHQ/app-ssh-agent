@@ -1558,7 +1558,8 @@ static void read_user_name(uint8_t *dataBuffer, uint32_t dataLength)
         userAvailable = dataLength;
     }
 
-    os_memmove(operationContext.userName, dataBuffer, userAvailable);
+    os_memmove(operationContext.userName + operationContext.userOffset,
+               dataBuffer, userAvailable);
     operationContext.userOffset += userAvailable;
 }
 
