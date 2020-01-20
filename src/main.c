@@ -1451,13 +1451,10 @@ static void check_path(uint8_t **pDataBuffer, uint32_t *pDataLength)
     *pDataLength = dataLength;
 }
 
-static void ins_get_public_key(void)
+static void ins_get_public_key(uint8_t p1, uint8_t p2, uint8_t *dataBuffer,
+                               uint32_t dataLength)
 {
-    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
     uint8_t privateKeyData[32];
-    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
     cx_ecfp_private_key_t privateKey;
     cx_curve_t curve;
 
@@ -1610,12 +1607,9 @@ static void read_blob(uint8_t **pDataBuffer, uint32_t *pDataLength, bool have_le
     *pDataLength = dataLength;
 }
 
-static void ins_sign_ssh_blob(void)
+static void ins_sign_ssh_blob(uint8_t p1, uint8_t p2, uint8_t *dataBuffer,
+                              uint32_t dataLength)
 {
-    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
     bool getPublicKey = ((p2 & P2_PUBLIC_KEY_MARKER) != 0);
     p2 &= ~P2_PUBLIC_KEY_MARKER;
 
@@ -1681,12 +1675,9 @@ static void ins_sign_ssh_blob(void)
     #endif
 }
 
-static void ins_sign_generic_hash(void)
+static void ins_sign_generic_hash(uint8_t p1, uint8_t p2, uint8_t *dataBuffer,
+                                  uint32_t dataLength)
 {
-    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
     bool last = ((p1 & P1_LAST_MARKER) != 0);
     p1 &= ~P1_LAST_MARKER;
 
@@ -1727,13 +1718,9 @@ static void ins_sign_generic_hash(void)
     #endif
 }
 
-static void ins_sign_direct_hash(void)
+static void ins_sign_direct_hash(uint8_t p1, uint8_t p2, uint8_t *dataBuffer,
+                                 uint32_t dataLength)
 {
-    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
-
     if ((p1 != 0) || !is_curve_valid(p2)) {
         THROW(0x6B00);
     }
@@ -1760,13 +1747,9 @@ static void ins_sign_direct_hash(void)
     #endif
 }
 
-static void ins_get_ecdh_secret(void)
+static void ins_get_ecdh_secret(uint8_t p1, uint8_t p2, uint8_t *dataBuffer,
+                                uint32_t dataLength)
 {
-    uint8_t p1 = G_io_apdu_buffer[OFFSET_P1];
-    uint8_t p2 = G_io_apdu_buffer[OFFSET_P2];
-    uint8_t *dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
-    uint32_t dataLength = G_io_apdu_buffer[OFFSET_LC];
-
     if ((p1 != 0x00) || !is_curve_valid(p2)) {
         THROW(0x6B00);
     }
@@ -1794,6 +1777,9 @@ static void ins_get_ecdh_secret(void)
 }
 
 void app_main(void) {
+    uint8_t *dataBuffer;
+    uint32_t dataLength;
+    uint8_t p1, p2;
     volatile unsigned int rx = 0;
     volatile unsigned int tx = 0;
     volatile unsigned int flags = 0;
@@ -1825,29 +1811,34 @@ void app_main(void) {
                     THROW(0x6E00);
                 }
 
+                p1 = G_io_apdu_buffer[OFFSET_P1];
+                p2 = G_io_apdu_buffer[OFFSET_P2];
+                dataBuffer = G_io_apdu_buffer + OFFSET_CDATA;
+                dataLength = G_io_apdu_buffer[OFFSET_LC];
+
                 switch (G_io_apdu_buffer[1]) {
                 case INS_GET_PUBLIC_KEY:
-                    ins_get_public_key();
+                    ins_get_public_key(p1, p2, dataBuffer, dataLength);
                     flags |= IO_ASYNCH_REPLY;
                     break;
 
                 case INS_SIGN_SSH_BLOB:
-                    ins_sign_ssh_blob();
+                    ins_sign_ssh_blob(p1, p2, dataBuffer, dataLength);
                     flags |= IO_ASYNCH_REPLY;
                     break;
 
                 case INS_SIGN_GENERIC_HASH:
-                    ins_sign_generic_hash();
+                    ins_sign_generic_hash(p1, p2, dataBuffer, dataLength);
                     flags |= IO_ASYNCH_REPLY;
                     break;
 
                 case INS_SIGN_DIRECT_HASH:
-                    ins_sign_direct_hash();
+                    ins_sign_direct_hash(p1, p2, dataBuffer, dataLength);
                     flags |= IO_ASYNCH_REPLY;
                     break;
 
                 case INS_GET_ECDH_SECRET:
-                    ins_get_ecdh_secret();
+                    ins_get_ecdh_secret(p1, p2, dataBuffer, dataLength);
                     flags |= IO_ASYNCH_REPLY;
                     break;
 
