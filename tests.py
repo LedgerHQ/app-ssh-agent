@@ -4,6 +4,7 @@ import binascii
 import pytest
 import sys
 import time
+from enum import IntEnum
 
 from ledgerwallet.client import LedgerClient
 from ledgerwallet.crypto.ecc import PrivateKey
@@ -12,31 +13,31 @@ from ledgerwallet.transport import enumerate_devices
 
 DEFAULT_PATH = "44'/535348'/0'/0/0"
 CLA = 0x80
-INS = {
-    "GET_PUBLIC_KEY":    0x02,
-    "SIGN_SSH_BLOB":     0x04,
-    "SIGN_GENERIC_HASH": 0x06,
-    "SIGN_DIRECT_HASH":  0x08,
-    "GET_ECDH_SECRET":   0x0A,
-}
-P1 = {
-    "FIRST":             0x00,
-    "NEXT":              0x01,
-    "LAST_MARKER":       0x80,
-    "LAST":              0x81,
-}
-CURVE = {
-    "PRIME256":          0x01,
-    "CURVE25519":        0x02,
-    "INVALID_03":        0x03,
-    "PUBLIC_KEY_MARKER": 0x80,
-}
 
-def build_apdu(ins, payload=b"", p1="FIRST", curve="PRIME256"):
+class Ins(IntEnum):
+    GET_PUBLIC_KEY    = 0x02
+    SIGN_SSH_BLOB     = 0x04
+    SIGN_GENERIC_HASH = 0x06
+    SIGN_DIRECT_HASH  = 0x08
+    GET_ECDH_SECRET   = 0x0A
+
+class P1(IntEnum):
+    FIRST             = 0x00
+    NEXT              = 0x01
+    LAST_MARKER       = 0x80
+    LAST              = 0x81
+
+class Curve(IntEnum):
+    PRIME256          = 0x01
+    CURVE25519        = 0x02
+    INVALID_03        = 0x03
+    PUBLIC_KEY_MARKER = 0x80
+
+def build_apdu(ins, payload, p1, curve):
     data = CLA.to_bytes(1, "big")
-    data += INS[ins].to_bytes(1, "big")
-    data += P1[p1].to_bytes(1, "big")
-    data += CURVE[curve].to_bytes(1, "big")
+    data += ins.to_bytes(1, "big")
+    data += p1.to_bytes(1, "big")
+    data += curve.to_bytes(1, "big")
     data += len(payload).to_bytes(1, "big")
     data += payload
     return data
@@ -51,7 +52,7 @@ def client():
     return LedgerClient(devices[0])
 
 class Client:
-    def apdu_exchange(self, client, payload=b"", p1="FIRST", curve="PRIME256"):
+    def apdu_exchange(self, client, payload=b"", p1=P1.FIRST, curve=Curve.PRIME256):
         apdu = build_apdu(self.INS, payload, p1, curve)
         response = client.raw_exchange(apdu)
         # some hangs were noticed with speculos otherwise
@@ -60,7 +61,7 @@ class Client:
         return status_word, response[:-2]
 
 class TestGetPublicKey(Client):
-    INS = "GET_PUBLIC_KEY"
+    INS = Ins.GET_PUBLIC_KEY
 
     def test_get_public_key(self, client):
         path = Bip32Path.build(DEFAULT_PATH)
@@ -73,25 +74,25 @@ class TestGetPublicKey(Client):
         assert status_word == 0x6a80
 
 class TestSignGenericHash(Client):
-    INS = "SIGN_GENERIC_HASH"
+    INS = Ins.SIGN_GENERIC_HASH
 
     def test_sign_generic_hash(self, client):
         payload = Bip32Path.build(DEFAULT_PATH) + b"a"
         status_word, _ = self.apdu_exchange(client, payload)
         assert status_word == 0x9000
 
-        status_word, _ = self.apdu_exchange(client, b"b", p1="NEXT")
+        status_word, _ = self.apdu_exchange(client, b"b", p1=P1.NEXT)
         assert status_word == 0x9000
 
-        status_word, _ = self.apdu_exchange(client, b"b", p1="LAST")
+        status_word, _ = self.apdu_exchange(client, b"b", p1=P1.LAST)
         assert status_word == 0x9000
 
     def test_invalid_curve(self, client):
-        status_word, _ = self.apdu_exchange(client, curve="INVALID_03")
+        status_word, _ = self.apdu_exchange(client, curve=Curve.INVALID_03)
         assert status_word == 0x6b00
 
 class TestSignDirectHash(Client):
-    INS = "SIGN_DIRECT_HASH"
+    INS = Ins.SIGN_DIRECT_HASH
 
     def test_sign_direct_hash(self, client):
         payload = Bip32Path.build(DEFAULT_PATH) + b"a" * 32
@@ -104,14 +105,14 @@ class TestSignDirectHash(Client):
         assert status_word == 0x6700
 
     def test_invalid_steps(self, client):
-        status_word, _ = self.apdu_exchange(client, p1="NEXT")
+        status_word, _ = self.apdu_exchange(client, p1=P1.NEXT)
         assert status_word == 0x6b00
 
-        status_word, _ = self.apdu_exchange(client, p1="LAST")
+        status_word, _ = self.apdu_exchange(client, p1=P1.LAST)
         assert status_word == 0x6b00
 
 class TestGetECDHSecret(Client):
-    INS = "GET_ECDH_SECRET"
+    INS = Ins.GET_ECDH_SECRET
 
     def test_get_ecdh_secret(self, client):
         pubkey = PrivateKey().pubkey.serialize(compressed=False)
@@ -120,7 +121,7 @@ class TestGetECDHSecret(Client):
         assert status_word == 0x9000
 
 class TestSignSSHBlob(Client):
-    INS = "SIGN_SSH_BLOB"
+    INS = Ins.SIGN_SSH_BLOB
 
     def test_sign_ssh_blob(self, client):
         requests = [ b"0\x00", b"username", b"22", b"333\x00", b"4444", b"55555" ]
