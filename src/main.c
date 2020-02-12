@@ -1967,38 +1967,46 @@ __attribute__((section(".boot"))) int main(void) {
     // exit critical section
     __asm volatile("cpsie i");
 
-    UX_INIT();
+    for (;;) {
+        UX_INIT();
 
-    // ensure exception will work as planned
-    os_boot();
+        // ensure exception will work as planned
+        os_boot();
 
-    BEGIN_TRY {
-        TRY {
-            io_seproxyhal_init();
+        BEGIN_TRY {
+            TRY {
+                io_seproxyhal_init();
 
-#ifdef TARGET_NANOX
-            // grab the current plane mode setting
-            G_io_app.plane_mode = os_setting_get(OS_SETTING_PLANEMODE, NULL, 0);
-#endif // TARGET_NANOX
+    #ifdef TARGET_NANOX
+                // grab the current plane mode setting
+                G_io_app.plane_mode = os_setting_get(OS_SETTING_PLANEMODE, NULL, 0);
+    #endif // TARGET_NANOX
 
-            USB_power(0);
-            USB_power(1);
+                USB_power(0);
+                USB_power(1);
 
-            ui_idle();
+                ui_idle();
 
-#ifdef HAVE_BLE
-            BLE_power(0, NULL);
-            BLE_power(1, "Nano X");
-#endif // HAVE_BLE
+    #ifdef HAVE_BLE
+                BLE_power(0, NULL);
+                BLE_power(1, "Nano X");
+    #endif // HAVE_BLE
 
-            app_main();
+                app_main();
+            }
+            CATCH(EXCEPTION_IO_RESET) {
+                // reset IO and UX before continuing
+                continue;
+            }
+            CATCH_ALL {
+                break;
+            }
+            FINALLY {
+            }
         }
-        CATCH_OTHER(e) {
-        }
-        FINALLY {
-        }
+        END_TRY;
     }
-    END_TRY;
 
     app_exit();
+    return 0;
 }
