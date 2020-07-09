@@ -1014,7 +1014,7 @@ const ux_flow_step_t *        const ux_approval_pgp_flow [] = {
 UX_STEP_VALID(
     ux_approval_pgp_ecdh_flow_1_step, 
     pbb,
-    io_seproxyhal_touch_sign_ok(NULL),
+    io_seproxyhal_touch_ecdh_ok(NULL),
     {
       &C_icon_validate_14,
       "PGP Agent",
@@ -1023,7 +1023,7 @@ UX_STEP_VALID(
 UX_STEP_VALID(
     ux_approval_pgp_ecdh_flow_2_step, 
     pb,
-    io_seproxyhal_touch_sign_cancel(NULL),
+    io_seproxyhal_touch_ecdh_cancel(NULL),
     {
       &C_icon_crossmark,
       "Cancel"
@@ -1158,7 +1158,7 @@ unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e) {
     uint32_t tx = 0;
     if (!operationContext.direct) {
         if (!operationContext.fullMessageHash) {
-            cx_hash(&operationContext.hash.header, CX_LAST, hash, 0, hash);
+            cx_hash(&operationContext.hash.header, CX_LAST, hash, 0, hash, sizeof(hash));
         }
     } else {
         os_memmove(hash, operationContext.hashData, 32);
@@ -1190,7 +1190,7 @@ unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e) {
         if (!operationContext.fullMessageHash) {
 #if CX_APILEVEL >= 8
             tx = cx_eddsa_sign(&privateKey, CX_LAST, CX_SHA512, hash,
-                               sizeof(hash), NULL, 0, G_io_apdu_buffer, NULL);
+                               sizeof(hash), NULL, 0, G_io_apdu_buffer, sizeof(G_io_apdu_buffer), NULL);
 #else
             tx = cx_eddsa_sign(&privateKey, NULL, CX_LAST, CX_SHA512, hash,
                                sizeof(hash), G_io_apdu_buffer);
@@ -1199,7 +1199,7 @@ unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e) {
 #if CX_APILEVEL >= 8            
             tx = cx_eddsa_sign(
                 &privateKey, CX_LAST, CX_SHA512, operationContext.message,
-                operationContext.messageLength, NULL, 0, G_io_apdu_buffer, NULL);
+                operationContext.messageLength, NULL, 0, G_io_apdu_buffer, sizeof(G_io_apdu_buffer), NULL);
 #else        
             tx = cx_eddsa_sign(
                 &privateKey, NULL, CX_LAST, CX_SHA512, operationContext.message,
@@ -1210,7 +1210,7 @@ unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e) {
 #if CX_APILEVEL >= 8        
         unsigned int info = 0;
         tx = cx_ecdsa_sign(&privateKey, CX_RND_RFC6979 | CX_LAST, CX_SHA256,
-                           hash, sizeof(hash), G_io_apdu_buffer, &info);
+                           hash, sizeof(hash), G_io_apdu_buffer, sizeof(G_io_apdu_buffer), &info);
         if (info & CX_ECCINFO_PARITY_ODD) {
             G_io_apdu_buffer[0] |= 0x01;
         }
@@ -1282,8 +1282,8 @@ unsigned int io_seproxyhal_touch_ecdh_ok(const bagl_element_t *e) {
 #endif
     cx_ecfp_init_private_key(operationContext.curve, privateKeyData, 32,
                              &privateKey);
-    tx = cx_ecdh(&privateKey, CX_ECDH_POINT, operationContext.publicKey.W,
-                 G_io_apdu_buffer);
+    tx = cx_ecdh(&privateKey, CX_ECDH_POINT, operationContext.publicKey.W, operationContext.publicKey.W_len,
+                 G_io_apdu_buffer, sizeof(G_io_apdu_buffer));
     os_memset(&privateKey, 0, sizeof(privateKey));
     os_memset(&privateKeyData, 0, sizeof(privateKeyData));
     G_io_apdu_buffer[tx++] = 0x90;
@@ -1588,7 +1588,7 @@ static void read_blob(uint8_t **pDataBuffer, uint32_t *pDataLength, bool have_le
     }
 
     if (!operationContext.fullMessageHash) {
-        cx_hash(&operationContext.hash.header, 0, dataBuffer, available, NULL);
+        cx_hash(&operationContext.hash.header, 0, dataBuffer, available, NULL, 0);
     } else {
         copy_message(dataBuffer, available);
     }
@@ -1696,7 +1696,7 @@ static void ins_sign_generic_hash(uint8_t p1, uint8_t p2, uint8_t *dataBuffer,
     }
 
     cx_hash(&operationContext.hash.header, 0, dataBuffer,
-            dataLength, NULL);
+            dataLength, NULL, 0);
 
     if (!last) {
         THROW(0x9000);
