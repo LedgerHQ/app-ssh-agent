@@ -1014,7 +1014,7 @@ const ux_flow_step_t *        const ux_approval_pgp_flow [] = {
 UX_STEP_VALID(
     ux_approval_pgp_ecdh_flow_1_step, 
     pbb,
-    io_seproxyhal_touch_sign_ok(NULL),
+    io_seproxyhal_touch_ecdh_ok(NULL),
     {
       &C_icon_validate_14,
       "PGP Agent",
@@ -1023,7 +1023,7 @@ UX_STEP_VALID(
 UX_STEP_VALID(
     ux_approval_pgp_ecdh_flow_2_step, 
     pb,
-    io_seproxyhal_touch_sign_cancel(NULL),
+    io_seproxyhal_touch_ecdh_cancel(NULL),
     {
       &C_icon_crossmark,
       "Cancel"
