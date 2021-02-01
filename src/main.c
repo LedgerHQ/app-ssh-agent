@@ -22,7 +22,7 @@
 #include "os_io_seproxyhal.h"
 #include "string.h"
 
-#include "glyphs.h"
+#include "ux.h"
 
 unsigned int io_seproxyhal_touch_exit(const bagl_element_t *e);
 unsigned int io_seproxyhal_touch_sign_ok(const bagl_element_t *e);
