@@ -21,7 +21,7 @@ endif
 include $(BOLOS_SDK)/Makefile.defines
 
 APPNAME = "SSH/PGP Agent"
-APP_LOAD_PARAMS=--appFlags 0x200 --curve ed25519 --curve prime256r1 --path "44'/535348'" --path "13'" --path "17'" $(COMMON_LOAD_PARAMS) 
+APP_LOAD_PARAMS=--appFlags 0x200 --curve ed25519 --curve secp256r1 --path "44'/535348'" --path "13'" --path "17'" $(COMMON_LOAD_PARAMS)
 APPVERSION_M=0
 APPVERSION_N=0
 APPVERSION_P=7
