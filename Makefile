@@ -30,10 +30,10 @@ APPVERSION=$(APPVERSION_M).$(APPVERSION_N).$(APPVERSION_P)
 ifeq ($(TARGET_NAME),TARGET_NANOS)
  ICONNAME=nanos_app_ssh.gif
  else
-	ifeq ($(TARGET_NAME),TARGET_NANOX)
-		ICONNAME=nanox_app_ssh.gif
-	else
+	ifeq ($(TARGET_NAME),TARGET_BLUE)
 		ICONNAME=blue_app_ssh.gif
+	else
+		ICONNAME=nanox_app_ssh.gif
 	endif
 endif
 ################
@@ -53,34 +53,35 @@ DEFINES   += APPVERSION=\"$(APPVERSION)\"
 # U2F
 DEFINES   += HAVE_U2F HAVE_IO_U2F
 DEFINES   += U2F_PROXY_MAGIC=\"BTC\"
-DEFINES   += USB_SEGMENT_SIZE=64 
+DEFINES   += USB_SEGMENT_SIZE=64
 DEFINES   += BLE_SEGMENT_SIZE=32 #max MTU, min 20
-
+DEFINES   += HAVE_UX_FLOW
 
 ifeq ($(TARGET_NAME),TARGET_NANOX)
-DEFINES   += IO_SEPROXYHAL_BUFFER_SIZE_B=300
 DEFINES       += HAVE_BLE BLE_COMMAND_TIMEOUT_MS=2000
 DEFINES       += HAVE_BLE_APDU # basic ledger apdu transport over BLE
+endif
 
+ifeq ($(TARGET_NAME),TARGET_NANOS)
+DEFINES       += IO_SEPROXYHAL_BUFFER_SIZE_B=128
+else
+DEFINES       += IO_SEPROXYHAL_BUFFER_SIZE_B=300
 DEFINES       += HAVE_GLO096
 DEFINES       += HAVE_BAGL BAGL_WIDTH=128 BAGL_HEIGHT=64
 DEFINES       += HAVE_BAGL_ELLIPSIS # long label truncation feature
 DEFINES       += HAVE_BAGL_FONT_OPEN_SANS_REGULAR_11PX
 DEFINES       += HAVE_BAGL_FONT_OPEN_SANS_EXTRABOLD_11PX
 DEFINES       += HAVE_BAGL_FONT_OPEN_SANS_LIGHT_16PX
-DEFINES       += HAVE_UX_FLOW
-else
-DEFINES   += IO_SEPROXYHAL_BUFFER_SIZE_B=128
 endif
 
 # Enabling debug PRINTF
 DEBUG = 0
 ifneq ($(DEBUG),0)
 
-        ifeq ($(TARGET_NAME),TARGET_NANOX)
-                DEFINES   += HAVE_PRINTF PRINTF=mcu_usb_printf
-        else
+        ifeq ($(TARGET_NAME),TARGET_NANOS)
                 DEFINES   += HAVE_PRINTF PRINTF=screen_printf
+        else
+                DEFINES   += HAVE_PRINTF PRINTF=mcu_usb_printf
         endif
 else
         DEFINES   += PRINTF\(...\)=
@@ -103,7 +104,7 @@ ifeq ($(GCCPATH),)
 $(info GCCPATH is not set: arm-none-eabi-* will be used from PATH)
 endif
 
-CC       := $(CLANGPATH)clang 
+CC       := $(CLANGPATH)clang
 
 #CFLAGS   += -O0
 CFLAGS   += -O3 -Os
@@ -112,7 +113,7 @@ AS     := $(GCCPATH)arm-none-eabi-gcc
 
 LD       := $(GCCPATH)arm-none-eabi-gcc
 LDFLAGS  += -O3 -Os
-LDLIBS   += -lm -lgcc -lc 
+LDLIBS   += -lm -lgcc -lc
 
 # import rules to compile glyphs(/pone)
 include $(BOLOS_SDK)/Makefile.glyphs
@@ -120,19 +121,10 @@ include $(BOLOS_SDK)/Makefile.glyphs
 ### computed variables
 APP_SOURCE_PATH  += src
 SDK_SOURCE_PATH  += lib_stusb lib_stusb_impl lib_u2f
+SDK_SOURCE_PATH  += lib_ux
 
 ifeq ($(TARGET_NAME),TARGET_NANOX)
 SDK_SOURCE_PATH  += lib_blewbxx lib_blewbxx_impl
-SDK_SOURCE_PATH  += lib_ux
-endif
-
-ifeq ($(TARGET_NAME),TARGET_NANOS)
-
-        ifneq "$(wildcard $(BOLOS_SDK)/lib_ux/src/ux_flow_engine.c)" ""
-                SDK_SOURCE_PATH  += lib_ux
-                DEFINES                += HAVE_UX_FLOW
-        endif
-
 endif
 
 load: all
