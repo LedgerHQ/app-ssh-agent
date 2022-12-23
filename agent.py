@@ -82,6 +82,8 @@ def handleSignRequest(message, key, eddsa, path):
 		else:
 			p2 = 0x01
 		offset += chunkSize
+		if offset == len(challenge):
+			p1 |= 0x80
 		apdu = "8004".decode('hex') + chr(p1) + chr(p2) + chr(len(data)) + data
 		signature = dongle.exchange(bytes(apdu))
 	dongle.close()

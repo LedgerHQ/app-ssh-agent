@@ -26,7 +26,6 @@
 #define DEPTH_REQUEST_1 0
 #define DEPTH_REQUEST_2 3
 #define DEPTH_USER 1
-#define DEPTH_LAST 6
 
 // A path contains 10 elements max, which max length in ascii is 1 whitespace + 10 char + optional quote "'" + "/" + \0"
 #define MAX_DERIV_PATH_ASCII_LENGTH 1 + 10*(10+2) + 1
