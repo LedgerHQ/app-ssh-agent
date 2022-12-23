@@ -247,6 +247,8 @@ void ins_sign_ssh_blob(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint32_t dat
 {
     bool getPublicKey = ((p2 & P2_PUBLIC_KEY_MARKER) != 0);
     p2 &= ~P2_PUBLIC_KEY_MARKER;
+    bool last = ((p1 & P1_LAST_MARKER) != 0);
+    p1 &= ~P1_LAST_MARKER;
 
     if (!is_curve_valid(p2)) {
         THROW(0x6B00);
@@ -271,9 +273,6 @@ void ins_sign_ssh_blob(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint32_t dat
     }
 
     while (dataLength != 0) {
-        if (operationContext.depth >= DEPTH_LAST) {
-            THROW(0x6a80);
-        }
         if (!operationContext.readingElement) {
             read_blob(&dataBuffer, &dataLength, false);
         }
@@ -282,7 +281,7 @@ void ins_sign_ssh_blob(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint32_t dat
         }
     }
 
-    if (operationContext.depth != DEPTH_LAST) {
+    if (!last) {
         THROW(0x9000);
     }
 
