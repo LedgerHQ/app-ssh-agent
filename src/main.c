@@ -207,12 +207,22 @@ unsigned char io_event(unsigned char channel) {
         break;
 #endif
 
+#ifdef HAVE_BAGL
     case SEPROXYHAL_TAG_DISPLAY_PROCESSED_EVENT:
         UX_DISPLAYED_EVENT({});
         break;
+#endif  // HAVE_BAGL
 
 
     case SEPROXYHAL_TAG_TICKER_EVENT:
+#ifdef HAVE_NBGL
+    {
+        UX_TICKER_EVENT(G_io_seproxyhal_spi_buffer,
+        {
+        });
+    }
+#endif
+#ifdef HAVE_BAGL
     {
         extern unsigned int ux_step;
         extern unsigned int ux_step_count;
@@ -226,8 +236,9 @@ unsigned char io_event(unsigned char channel) {
                 UX_REDISPLAY();
             }
         });
-        break;
     }
+#endif
+        break;
 
     // unknown events are acknowledged
     default:
@@ -280,7 +291,7 @@ __attribute__((section(".boot"))) int main(void) {
 
     #ifdef HAVE_BLE
                 BLE_power(0, NULL);
-                BLE_power(1, "Nano X");
+                BLE_power(1, NULL);
     #endif // HAVE_BLE
 
                 app_main();

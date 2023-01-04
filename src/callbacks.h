@@ -3,7 +3,7 @@
 
 #include "ux.h"
 
-#ifdef TARGET_FATSTACKS
+#ifdef TARGET_STAX
 typedef uint32_t bagl_element_t;
 #endif
 
