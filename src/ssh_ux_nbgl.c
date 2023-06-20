@@ -6,12 +6,31 @@
 #include "os_helpers.h"
 #include "ux.h"
 
+void ui_idle(void);
+
 void app_quit() {
     os_sched_exit(-1);
 }
 
+static const char *const infoTypes[]    = {"Version", "Developer", "Copyright"};
+static const char *const infoContents[] = {APPVERSION, "Ledger", "(c) 2023 Ledger"};
+
+static bool navigation_cb(uint8_t page, nbgl_pageContent_t *content) {
+    UNUSED(page);
+    content->type                   = INFOS_LIST;
+    content->infosList.nbInfos      = 3;
+    content->infosList.infoTypes    = infoTypes;
+    content->infosList.infoContents = infoContents;
+    return true;
+}
+
+void app_settings() {
+    nbgl_useCaseSettings(APPNAME, 0, 1, false, ui_idle, navigation_cb, NULL);
+}
+
 void ui_idle(void) {
-    nbgl_useCaseHome(APPNAME, &C_icon_app_ssh_64px, "Application is ready.", false, NULL, app_quit);
+    nbgl_useCaseHome(APPNAME, &C_icon_app_ssh_64px, "Application is ready.", false, app_settings,
+                     app_quit);
 }
 
 static void ui_get_public_key_choice(bool choice) {
