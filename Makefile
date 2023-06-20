@@ -30,13 +30,11 @@ APPVERSION_P=8
 APPVERSION=$(APPVERSION_M).$(APPVERSION_N).$(APPVERSION_P)
 
 ifeq ($(TARGET_NAME),TARGET_NANOS)
- ICONNAME=nanos_app_ssh.gif
- else
-	ifeq ($(TARGET_NAME),TARGET_BLUE)
-		ICONNAME=blue_app_ssh.gif
-	else
-		ICONNAME=nanox_app_ssh.gif
-	endif
+ICONNAME=nanos_app_ssh.gif
+else ifeq ($(TARGET_NAME),TARGET_STAX)
+ICONNAME=stax_app_ssh.gif
+else
+ICONNAME=nanox_app_ssh.gif
 endif
 ################
 # Default rule #

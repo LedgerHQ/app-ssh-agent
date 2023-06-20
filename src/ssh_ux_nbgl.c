@@ -11,7 +11,7 @@ void app_quit() {
 }
 
 void ui_idle(void) {
-    nbgl_useCaseHome(APPNAME, NULL, "Application is ready.", false, NULL, app_quit);
+    nbgl_useCaseHome(APPNAME, &C_icon_app_ssh_64px, "Application is ready.", false, NULL, app_quit);
 }
 
 static void ui_get_public_key_choice(bool choice) {
