@@ -8,6 +8,7 @@
 #define MAX_USER_NAME 20
 
 typedef struct operationContext_t {
+    bool initialized;
     uint8_t pathLength;
     uint32_t bip32Path[MAX_BIP32_PATH];
     cx_sha256_t hash;
