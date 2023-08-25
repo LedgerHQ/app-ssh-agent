@@ -269,7 +269,12 @@ void ins_sign_ssh_blob(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint32_t dat
         operationContext.lengthOffset = 0;
         operationContext.userOffset = 0;
         operationContext.direct = false;
+        operationContext.initialized = true;
     } else if (p1 != P1_NEXT) {
+        THROW(0x6B00);
+    }
+
+    if (!operationContext.initialized) {
         THROW(0x6B00);
     }
 
@@ -313,7 +318,12 @@ void ins_sign_generic_hash(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint32_t
         operationContext.direct = false;
         operationContext.getPublicKey = false;
         operationContext.fullMessageHash = false;
+        operationContext.initialized = true;
     } else if (p1 != P1_NEXT) {
+        THROW(0x6B00);
+    }
+
+    if (!operationContext.initialized) {
         THROW(0x6B00);
     }
 
