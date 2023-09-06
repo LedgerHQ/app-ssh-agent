@@ -27,15 +27,19 @@
 #define DEPTH_REQUEST_2 3
 #define DEPTH_USER 1
 
-// A path contains 10 elements max, which max length in ascii is 1 whitespace + 10 char + optional quote "'" + "/" + \0"
-#define MAX_DERIV_PATH_ASCII_LENGTH 1 + 10*(10+2) + 1
+// A path contains 10 elements max, which max length in ascii is 1 whitespace +
+// 10 char + optional quote "'" + "/" + \0"
+#define MAX_DERIV_PATH_ASCII_LENGTH 1 + 10 * (10 + 2) + 1
 
-
-void ins_get_ecdh_secret(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint32_t dataLength);
-void ins_get_public_key(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint32_t dataLength);
-void ins_sign_ssh_blob(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint32_t dataLength);
-void ins_sign_generic_hash(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint32_t dataLength);
-void ins_sign_direct_hash(uint8_t p1, uint8_t p2, uint8_t *dataBuffer, uint32_t dataLength);
-
+void ins_get_ecdh_secret(uint8_t p1, uint8_t p2, uint8_t *dataBuffer,
+                         uint32_t dataLength);
+void ins_get_public_key(uint8_t p1, uint8_t p2, uint8_t *dataBuffer,
+                        uint32_t dataLength);
+void ins_sign_ssh_blob(uint8_t p1, uint8_t p2, uint8_t *dataBuffer,
+                       uint32_t dataLength);
+void ins_sign_generic_hash(uint8_t p1, uint8_t p2, uint8_t *dataBuffer,
+                           uint32_t dataLength);
+void ins_sign_direct_hash(uint8_t p1, uint8_t p2, uint8_t *dataBuffer,
+                          uint32_t dataLength);
 
 #endif // BUSINESS_H_
