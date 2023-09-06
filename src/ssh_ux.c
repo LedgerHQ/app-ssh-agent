@@ -909,10 +909,9 @@ void ui_idle(void) {
 
 unsigned int ui_idle_nanos_button(unsigned int button_mask,
                                   unsigned int button_mask_counter) {
-  switch (button_mask) {
-  case BUTTON_EVT_RELEASED | BUTTON_LEFT: // EXIT
+  if (button_mask == (BUTTON_EVT_RELEASED | BUTTON_LEFT)) {
+    // EXIT
     io_seproxyhal_touch_exit(NULL);
-    break;
   }
   return 0;
 }
