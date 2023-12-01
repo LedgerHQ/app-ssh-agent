@@ -6,7 +6,14 @@ This agent is compatible with the third party SSH/PGP host client from Roman Zey
 
 You can also use the SSH functionalities with the following instructions using Python 2 :
 
-Run getPublicKey.py to get the public key in SSH format, to be added to your authorized keys on the target
+Install dependencies first, for example in a Debian-based distro you would do:
+
+```
+sudo apt-get install libudev-dev libusb-1.0-0-dev
+pip install ledgerblue
+```
+
+Then run getPublicKey.py to get the public key in SSH format, to be added to your authorized keys on the target
 
 ```
 python getPublicKey.py
