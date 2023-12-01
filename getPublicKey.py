@@ -22,6 +22,7 @@ from ledgerblue.commException import CommException
 import argparse
 import struct
 import base64
+import codecs
 
 KEY_HEADER = "ecdsa-sha2-nistp256"
 CURVE_NAME = "nistp256"
@@ -30,7 +31,7 @@ KEY_HEADER_ED25519 = "ssh-ed25519"
 def parse_bip32_path(path):
 	if len(path) == 0:
 		return ""
-	result = ""
+	result = b""
 	elements = path.split('/')
 	for pathElement in elements:
 		element = pathElement.split('\'')
@@ -57,21 +58,21 @@ else:
 
 donglePath = parse_bip32_path(args.path)
 apdu = "800200" + p2 
-apdu = apdu.decode('hex') + chr(len(donglePath) + 1) + chr(len(donglePath) / 4) + donglePath
-
+#apdu = apdu.decode('hex') + chr(len(donglePath) + 1) + chr(len(donglePath) / 4) + donglePath
+apdu = codecs.decode(apdu, 'hex') + bytes(chr(len(donglePath) + 1), encoding='utf8') + bytes(chr(int(len(donglePath) / 4)), encoding='utf8') + donglePath
 dongle = getDongle(True)
 result = dongle.exchange(bytes(apdu))
 key = str(result[1:])
-blob = struct.pack(">I", len(KEY_HEADER)) + keyHeader 
+blob = struct.pack(">I", len(KEY_HEADER)) + bytes(keyHeader, encoding="utf-8") 
 if args.ed25519:
 	keyX = bytearray(key[0:32])
 	keyY = bytearray(key[32:][::-1])
-	if ((keyX[31] & 1)<>0):
+	if ((keyX[31] & 1) != 0):
 		keyY[31] |= 0x80
 	key = str(keyY)
 else:
-	blob += struct.pack(">I", len(CURVE_NAME)) + CURVE_NAME
+	blob += struct.pack(">I", len(CURVE_NAME)) + bytes(CURVE_NAME, encoding="utf-8") 
 	
-blob += struct.pack(">I", len(key)) + key
-print keyHeader + " " + base64.b64encode(blob)
+blob += struct.pack(">I", len(key)) + bytes(key, encoding="utf-8")
+print(keyHeader + " " + base64.b64encode(blob).decode("utf-8"))
 
