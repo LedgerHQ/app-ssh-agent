@@ -26,7 +26,7 @@ CFLAGS    += -DAPPNAME=\"$(APPNAME)\"
 APP_LOAD_PARAMS=--appFlags 0x200 --curve ed25519 --curve secp256r1 --path "44'/535348'" --path "13'" --path "17'" $(COMMON_LOAD_PARAMS)
 APPVERSION_M=0
 APPVERSION_N=0
-APPVERSION_P=10
+APPVERSION_P=11
 APPVERSION=$(APPVERSION_M).$(APPVERSION_N).$(APPVERSION_P)
 
 ifeq ($(TARGET_NAME),TARGET_NANOS)
@@ -142,10 +142,10 @@ SDK_SOURCE_PATH  += lib_ux
 endif
 
 load: all
-	python -m ledgerblue.loadApp $(APP_LOAD_PARAMS)
+	python3 -m ledgerblue.loadApp $(APP_LOAD_PARAMS)
 
 delete:
-	python -m ledgerblue.deleteApp $(COMMON_DELETE_PARAMS)
+	python3 -m ledgerblue.deleteApp $(COMMON_DELETE_PARAMS)
 
 # import generic rules from the sdk
 include $(BOLOS_SDK)/Makefile.rules

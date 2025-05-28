@@ -183,28 +183,6 @@ unsigned char io_event(unsigned char channel) {
     break;
 #endif // HAVE_BAGL
 
-#ifdef HAVE_BLE
-    // Make automatically discoverable again when disconnected
-
-  case SEPROXYHAL_TAG_BLE_CONNECTION_EVENT:
-    if (G_io_seproxyhal_spi_buffer[3] == 0) {
-      // TODO : cleaner reset sequence
-      // first disable BLE before turning it off
-      G_io_seproxyhal_spi_buffer[0] = SEPROXYHAL_TAG_BLE_RADIO_POWER;
-      G_io_seproxyhal_spi_buffer[1] = 0;
-      G_io_seproxyhal_spi_buffer[2] = 1;
-      G_io_seproxyhal_spi_buffer[3] = 0;
-      io_seproxyhal_spi_send(G_io_seproxyhal_spi_buffer, 4);
-      // send BLE power on (default parameters)
-      G_io_seproxyhal_spi_buffer[0] = SEPROXYHAL_TAG_BLE_RADIO_POWER;
-      G_io_seproxyhal_spi_buffer[1] = 0;
-      G_io_seproxyhal_spi_buffer[2] = 1;
-      G_io_seproxyhal_spi_buffer[3] = 3; // ble on & advertise
-      io_seproxyhal_spi_send(G_io_seproxyhal_spi_buffer, 5);
-    }
-    break;
-#endif
-
 #ifdef HAVE_BAGL
   case SEPROXYHAL_TAG_DISPLAY_PROCESSED_EVENT:
     UX_DISPLAYED_EVENT({});

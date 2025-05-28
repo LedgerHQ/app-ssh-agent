@@ -66,7 +66,7 @@ class TestSignGenericHash:
 
     def test_invalid_curve(self, client):
         with pytest.raises(CommException) as e:
-            client.apdu_exchange(self.INS, sw1=P1.FIRST, sw2=Curve.INVALID_03)
+            client.apdu_exchange(self.INS, p1=P1.FIRST, p2=Curve.INVALID_03)
         assert e.value.sw == 0x6b00
 
 class TestSignDirectHash:
@@ -79,16 +79,16 @@ class TestSignDirectHash:
     def test_invalid_hash_len(self, client):
         payload = Bip32Path.build(DEFAULT_PATH) + b"a"
         with pytest.raises(CommException) as e:
-            client.apdu_exchange(self.INS, payload, sw1=P1.FIRST, sw2=Curve.PRIME256)
+            client.apdu_exchange(self.INS, payload, p1=P1.FIRST, p2=Curve.PRIME256)
         assert e.value.sw == 0x6700
 
     def test_invalid_steps(self, client):
         with pytest.raises(CommException) as e:
-            client.apdu_exchange(self.INS, sw1=P1.NEXT, sw2=Curve.PRIME256)
+            client.apdu_exchange(self.INS, p1=P1.NEXT, p2=Curve.PRIME256)
         assert e.value.sw == 0x6b00
 
         with pytest.raises(CommException) as e:
-            client.apdu_exchange(self.INS, sw1=P1.LAST, sw2=Curve.PRIME256)
+            client.apdu_exchange(self.INS, p1=P1.LAST, p2=Curve.PRIME256)
         assert e.value.sw == 0x6b00
 
 class TestGetECDHSecret:
@@ -97,7 +97,7 @@ class TestGetECDHSecret:
     def test_get_ecdh_secret(self, client):
         pubkey = PrivateKey().pubkey.serialize(compressed=False)
         payload = Bip32Path.build(DEFAULT_PATH) + pubkey
-        client.apdu_exchange(self.INS, payload, sw1=P1.FIRST, sw2=Curve.PRIME256)
+        client.apdu_exchange(self.INS, payload, p1=P1.FIRST, p2=Curve.PRIME256)
 
 class TestSignSSHBlob:
     INS = Ins.SIGN_SSH_BLOB
@@ -112,5 +112,5 @@ class TestSignSSHBlob:
             payload += length.to_bytes(4, "big")
             payload += request
 
-        data = client.apdu_exchange(self.INS, payload, sw1=P1.FIRST, sw2=Curve.PRIME256)
+        data = client.apdu_exchange(self.INS, payload, p1=P1.FIRST, p2=Curve.PRIME256)
         assert data.startswith(b"\x30")
