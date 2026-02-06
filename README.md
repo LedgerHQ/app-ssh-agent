@@ -34,7 +34,7 @@ A simple PGP and SSH agent for Ledger Blue, supporting prime256v1 and ed25519 ke
 This agent is compatible with the third party SSH/PGP host client from Roman Zeyde available at [trezor](https://github.com/romanz/trezor-agent).
 It is recommended to use it for extra functionalities.
 
-You can also use the SSH functionalities with the following instructions using Python 2:
+You can also use the SSH functionalities with the following instructions using Python.
 
 Run `getPublicKey.py` to get the public key in SSH format, to be added to your authorized keys on the target
 

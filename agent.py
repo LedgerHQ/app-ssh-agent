@@ -18,14 +18,13 @@
 ********************************************************************************
 """
 from ledgerblue.comm import getDongle
-from ledgerblue.commException import CommException
 import argparse
 import struct
 import base64
 import os 
 import socket
 import tempfile
-import thread
+import threading
 import logging
 
 SIG_HEADER = "ecdsa-sha2-nistp256"
@@ -44,64 +43,56 @@ SSH_AGENT_FAILURE = 5
 
 def handleRequestIdentities(message, key, eddsa, path):
 	logging.debug("Request identities")
-	response = chr(SSH2_AGENT_IDENTITIES_ANSWER)
+	response = bytes([SSH2_AGENT_IDENTITIES_ANSWER])
 	response += struct.pack(">I", 1)
 	response += struct.pack(">I", len(key)) + key
-	response += struct.pack(">I", len(path)) + path
+	response += struct.pack(">I", len(path)) + path.encode()
 	return response
 
 def handleSignRequest(message, key, eddsa, path):
 	logging.debug("Sign request")
 	blobSize = struct.unpack(">I", message[0:4])[0]
 	blob = message[4 : 4 + blobSize]
-	if blob <> key:
-		logging.debug("Client sent a different blob " + blob.encode('hex'))
-		return chr(SSH_AGENT_FAILURE)
+	if blob != key:
+		logging.debug("Client sent a different blob " + blob.hex())
+		return bytes([SSH_AGENT_FAILURE])
 	challengeSize = struct.unpack(">I", message[4 + blobSize : 4 + blobSize + 4])[0]
 	challenge = message[4 + blobSize + 4: 4 + blobSize + 4 + challengeSize]
 	# Send the challenge in chunks
 	dongle = getDongle(logging.getLogger().isEnabledFor(logging.DEBUG))
 	donglePath = parse_bip32_path(args.path)
 	offset = 0
-	while offset <> len(challenge):
-		data = ""
+	while offset != len(challenge):
+		data = b""
 		if offset == 0:
 			donglePath = parse_bip32_path(path)
-			data = chr(len(donglePath) / 4) + donglePath
-		if (len(challenge) - offset) > (255 - len(data)):
-			chunkSize = (255 - len(data))
-		else:
-			chunkSize = len(challenge) - offset
+			data = bytes([len(donglePath) // 4]) + donglePath
+		chunkSize = min(255 - len(data), len(challenge) - offset)
 		data += challenge[offset : offset + chunkSize]
-		if offset == 0:
-			p1 = 0x00
-		else:
-			p1 = 0x01
-		if eddsa:
-			p2 = 0x02
-		else:
-			p2 = 0x01
+		p1 = 0x00 if offset == 0 else 0x01
+		p2 = 0x02 if eddsa else 0x01
 		offset += chunkSize
 		if offset == len(challenge):
 			p1 |= 0x80
-		apdu = "8004".decode('hex') + chr(p1) + chr(p2) + chr(len(data)) + data
-		signature = dongle.exchange(bytes(apdu))
+		apdu = bytes.fromhex("8004") + bytes([p1, p2, len(data)]) + data
+		signature = dongle.exchange(apdu)
 	dongle.close()
 	# Parse r and s
 	rLength = signature[3]
 	r = signature[4 : 4 + rLength]
 	sLength = signature[4 + rLength + 1]
 	s = signature[4 + rLength + 2:]
-	r = str(r)
-	s = str(s)
+	r = bytes(r)
+	s = bytes(s)
 
 	encodedSignatureValue = struct.pack(">I", len(r)) + r
 	encodedSignatureValue += struct.pack(">I", len(s)) + s
 
-	encodedSignature = struct.pack(">I", len(SIG_HEADER)) + SIG_HEADER
+	sig_header = SIG_HEADER_EDDSA if eddsa else SIG_HEADER
+	encodedSignature = struct.pack(">I", len(sig_header)) + sig_header.encode()
 	encodedSignature += struct.pack(">I", len(encodedSignatureValue)) + encodedSignatureValue
 
-	response = chr(SSH2_AGENT_SIGN_RESPONSE)
+	response = bytes([SSH2_AGENT_SIGN_RESPONSE])
 
 	response += struct.pack(">I", len(encodedSignature)) + encodedSignature
 	return response
@@ -122,44 +113,44 @@ def clientHandlerInternal(connection, key, eddsa, comment):
 			message = connection.recv(size)
 		except socket.timeout:
 			logging.debug("Timeout")
-			message = ""			
+			message = ""
 		if len(message) == 0:
 			logging.debug("Client dropped connection")
 			break
-		logging.debug("<= " + message.encode('hex'))
-		messageType = ord(message[0])
+		logging.debug("<= " + message.hex())
+		messageType = message[0]
 		if messageType == SSH2_AGENTC_REQUEST_IDENTITIES:
 			response = handleRequestIdentities(message[1:], key, eddsa, comment)
 		elif messageType == SSH2_AGENTC_SIGN_REQUEST:
 			response = handleSignRequest(message[1:], key, eddsa, comment)
 		else:
 			logging.debug("Unhandled message")
-			response = chr(SSH_AGENT_FAILURE)
+			response = bytes([SSH_AGENT_FAILURE])
 		agentResponse = struct.pack(">I", len(response)) + response
-		logging.debug("=> " + agentResponse.encode('hex'))
-		connection.send(agentResponse)	
+		logging.debug("=> " + agentResponse.hex())
+		connection.send(agentResponse)
 
-def clientHandler(connection, key, eddsa, comment):		
+def clientHandler(connection, key, eddsa, comment):
 	try:
 		clientHandlerInternal(connection, key, eddsa, comment)
 	except Exception:
 		logging.debug("Internal error handling client", exc_info=True)
-		response = chr(SSH_AGENT_FAILURE)
+		response = bytes([SSH_AGENT_FAILURE])
 		agentResponse = struct.pack(">I", len(response)) + response
-		logging.debug("=> " + agentResponse.encode('hex'))
-		connection.send(agentResponse)	
+		logging.debug("=> " + agentResponse.hex())
+		connection.send(agentResponse)
 
 def parse_bip32_path(path):
 	if len(path) == 0:
-		return ""
-	result = ""
+		return b""
+	result = b""
 	elements = path.split('/')
 	for pathElement in elements:
 		element = pathElement.split('\'')
 		if len(element) == 1:
-			result = result + struct.pack(">I", int(element[0]))			
+			result += struct.pack(">I", int(element[0]))
 		else:
-			result = result + struct.pack(">I", 0x80000000 | int(element[0]))
+			result += struct.pack(">I", 0x80000000 | int(element[0]))
 	return result
 
 parser = argparse.ArgumentParser()
@@ -169,23 +160,23 @@ parser.add_argument("--ed25519", help="Use Ed25519 curve", action='store_true')
 parser.add_argument('--debug', help="Display debugging information", action='store_true')
 args = parser.parse_args()
 
-if args.path == None:
+if args.path is None:
 	args.path = "44'/535348'/0'/0/0"
 
-if args.key == None:
+if args.key is None:
 	raise Exception("No key specified")
 
 if args.debug:
-	logging.getLogger().setLevel(logging.DEBUG)
+	logging.basicConfig(level=logging.DEBUG)
 
 keyBlob = base64.b64decode(args.key)
 
 socketPath = tempfile.NamedTemporaryFile(prefix=SOCK_PREFIX, delete=False)
 os.unlink(socketPath.name)
-print "Export those variables in your shell to use this agent"
-print "export SSH_AUTH_SOCK=" + socketPath.name
-print "export SSH_AGENT_PID=" + str(os.getpid())
-print "Agent running ..."
+print("Export those variables in your shell to use this agent")
+print("export SSH_AUTH_SOCK=" + socketPath.name)
+print("export SSH_AGENT_PID=" + str(os.getpid()))
+print("Agent running ...")
 
 server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 server.bind(socketPath.name)
@@ -196,9 +187,8 @@ try:
 		connection, addr = server.accept()
 		logging.debug("New client connected")
 		connection.settimeout(TIMEOUT)
-		thread.start_new_thread(clientHandler, (connection, keyBlob, args.ed25519, args.path))
+		threading.Thread(target=clientHandler, args=(connection, keyBlob, args.ed25519, args.path)).start()
 except KeyboardInterrupt:
 	pass
 finally:
 	os.unlink(socketPath.name)
-		
