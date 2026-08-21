@@ -1,4 +1,4 @@
 [app]
 build_directory = "./"
 sdk = "C"
-devices = ["nanos", "nanox", "nanos+", "stax"]
+devices = ["nanox", "nanos+", "stax"]
